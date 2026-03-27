@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Frontend build artifacts
+frontend/dist/
+frontend/node_modules/
+
+# Misc
+.claude/

@@ -1,0 +1,60 @@
+{
+  "directives": {
+    ".tran": {
+      "syntax": ".tran <tstop>",
+      "fullSyntax": ".tran <tstep> <tstop> [<tstart> [<tmaxstep>]] [startup] [steady]",
+      "description": "Transient analysis"
+    },
+    ".ac": {
+      "syntax": ".ac <type> <npts> <fstart> <fstop>",
+      "description": "AC analysis",
+      "typeOptions": ["dec", "oct", "lin"]
+    },
+    ".dc": {
+      "syntax": ".dc <source> <start> <stop> <step>",
+      "description": "DC sweep"
+    },
+    ".noise": {
+      "syntax": ".noise V(<out>) <src> <type> <npts> <fstart> <fstop>",
+      "description": "Noise analysis"
+    },
+    ".param": {
+      "syntax": ".param <name>=<value> [<name>=<value>...]",
+      "description": "Parameter definition"
+    },
+    ".lib": {
+      "syntax": ".lib <filename>",
+      "description": "Include SPICE library"
+    },
+    ".model": {
+      "syntax": ".model <name> <type>([params])",
+      "description": "Model definition"
+    },
+    ".include": {
+      "syntax": ".include <filename>",
+      "description": "Include file"
+    },
+    ".op": {
+      "syntax": ".op",
+      "description": "DC operating point"
+    },
+    ".meas": {
+      "syntax": ".meas <analysisType> <name> <measurement>",
+      "description": "Measurement"
+    },
+    ".ic": {
+      "syntax": ".ic V(<node>)=<value>",
+      "description": "Initial conditions"
+    },
+    ".options": {
+      "syntax": ".options <option>=<value>",
+      "description": "Simulation options"
+    }
+  },
+  "valueFormats": {
+    "AC": "AC <magnitude> [phase]",
+    "PULSE": "PULSE(<V1> <V2> <Tdelay> <Trise> <Tfall> <Ton> <Tperiod> [<Ncycles>])",
+    "SINE": "SINE(<Voffset> <Vamp> <Freq> [<Tdelay> <Theta> <Phi> <Ncycles>])",
+    "PWL": "PWL(<t1> <v1> <t2> <v2> ...)"
+  }
+}

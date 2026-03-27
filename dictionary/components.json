@@ -1,0 +1,259 @@
+{
+  "components": {
+    "res": {
+      "id": "res",
+      "category": "passive",
+      "displayName": "Resistor",
+      "symbol": {
+        "width": 64,
+        "height": 32,
+        "svgPath": "M0,16 L8,16 L12,0 L20,32 L28,0 L36,32 L44,0 L52,32 L56,16 L64,16"
+      },
+      "pins": [
+        { "name": "1", "position": [0, 16], "direction": "left" },
+        { "name": "2", "position": [64, 16], "direction": "right" }
+      ],
+      "ascSyntax": {
+        "symbolName": "res",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "cap": {
+      "id": "cap",
+      "category": "passive",
+      "displayName": "Capacitor",
+      "symbol": {
+        "width": 32,
+        "height": 48,
+        "svgPath": "M16,0 L16,20 M0,20 L32,20 M0,28 L32,28 M16,28 L16,48"
+      },
+      "pins": [
+        { "name": "1", "position": [16, 0], "direction": "up" },
+        { "name": "2", "position": [16, 48], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "cap",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "ind": {
+      "id": "ind",
+      "category": "passive",
+      "displayName": "Inductor",
+      "symbol": {
+        "width": 32,
+        "height": 64,
+        "svgPath": "M16,0 L16,8 M16,8 Q8,8 8,16 Q8,24 16,24 Q24,24 24,32 Q24,40 16,40 Q8,40 8,48 Q8,56 16,56 L16,64"
+      },
+      "pins": [
+        { "name": "1", "position": [16, 0], "direction": "up" },
+        { "name": "2", "position": [16, 64], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "ind",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "voltage": {
+      "id": "voltage",
+      "category": "sources",
+      "displayName": "Voltage Source",
+      "symbol": {
+        "width": 48,
+        "height": 96,
+        "svgPath": "M24,0 L24,24 M24,72 L24,96 M24,24 A24,24 0 1,1 24,72 A24,24 0 1,1 24,24 M24,36 L24,44 M20,40 L28,40 M20,56 L28,56"
+      },
+      "pins": [
+        { "name": "+", "position": [24, 0], "direction": "up" },
+        { "name": "-", "position": [24, 96], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "voltage",
+        "attributes": ["InstName", "Value", "Value2"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "current": {
+      "id": "current",
+      "category": "sources",
+      "displayName": "Current Source",
+      "symbol": {
+        "width": 48,
+        "height": 96,
+        "svgPath": "M24,0 L24,24 M24,72 L24,96 M24,24 A24,24 0 1,1 24,72 A24,24 0 1,1 24,24 M24,40 L24,60 M18,54 L24,60 L30,54"
+      },
+      "pins": [
+        { "name": "+", "position": [24, 0], "direction": "up" },
+        { "name": "-", "position": [24, 96], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "current",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "opamp2": {
+      "id": "opamp2",
+      "category": "amplifiers",
+      "displayName": "Op-Amp (2-input)",
+      "symbol": {
+        "width": 80,
+        "height": 96,
+        "svgPath": "M0,0 L80,48 L0,96 Z"
+      },
+      "pins": [
+        { "name": "out", "position": [80, 48], "direction": "right" },
+        { "name": "in+", "position": [0, 64], "direction": "left" },
+        { "name": "in-", "position": [0, 32], "direction": "left" },
+        { "name": "V+", "position": [32, 0], "direction": "up" },
+        { "name": "V-", "position": [32, 96], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "opamp2",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "opamp": {
+      "id": "opamp",
+      "category": "amplifiers",
+      "displayName": "Op-Amp (single supply)",
+      "symbol": {
+        "width": 80,
+        "height": 96,
+        "svgPath": "M0,0 L80,48 L0,96 Z"
+      },
+      "pins": [
+        { "name": "out", "position": [80, 48], "direction": "right" },
+        { "name": "in+", "position": [0, 64], "direction": "left" },
+        { "name": "in-", "position": [0, 32], "direction": "left" }
+      ],
+      "ascSyntax": {
+        "symbolName": "opamp",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "npn": {
+      "id": "npn",
+      "category": "semiconductors",
+      "displayName": "NPN Transistor",
+      "symbol": {
+        "width": 48,
+        "height": 64,
+        "svgPath": "M16,16 L16,48 M16,32 L48,16 M16,32 L48,48 M0,32 L16,32 M44,18 L48,16 L46,20"
+      },
+      "pins": [
+        { "name": "C", "position": [48, 0], "direction": "up" },
+        { "name": "B", "position": [0, 32], "direction": "left" },
+        { "name": "E", "position": [48, 64], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "npn",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "pnp": {
+      "id": "pnp",
+      "category": "semiconductors",
+      "displayName": "PNP Transistor",
+      "symbol": {
+        "width": 48,
+        "height": 64,
+        "svgPath": "M16,16 L16,48 M16,32 L48,16 M16,32 L48,48 M0,32 L16,32 M18,20 L16,16 L20,18"
+      },
+      "pins": [
+        { "name": "C", "position": [48, 64], "direction": "down" },
+        { "name": "B", "position": [0, 32], "direction": "left" },
+        { "name": "E", "position": [48, 0], "direction": "up" }
+      ],
+      "ascSyntax": {
+        "symbolName": "pnp",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "nmos": {
+      "id": "nmos",
+      "category": "semiconductors",
+      "displayName": "NMOS Transistor",
+      "symbol": {
+        "width": 48,
+        "height": 64,
+        "svgPath": "M32,8 L32,24 M32,40 L32,56 M24,8 L24,56 M24,32 L0,32 M32,16 L48,16 M32,48 L48,48 M48,16 L48,0 M48,48 L48,64"
+      },
+      "pins": [
+        { "name": "D", "position": [48, 0], "direction": "up" },
+        { "name": "G", "position": [0, 32], "direction": "left" },
+        { "name": "S", "position": [48, 64], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "nmos",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "pmos": {
+      "id": "pmos",
+      "category": "semiconductors",
+      "displayName": "PMOS Transistor",
+      "symbol": {
+        "width": 48,
+        "height": 64,
+        "svgPath": "M32,8 L32,24 M32,40 L32,56 M24,8 L24,56 M24,32 L0,32 M32,16 L48,16 M32,48 L48,48 M48,16 L48,0 M48,48 L48,64 M20,32 L24,32"
+      },
+      "pins": [
+        { "name": "S", "position": [48, 0], "direction": "up" },
+        { "name": "G", "position": [0, 32], "direction": "left" },
+        { "name": "D", "position": [48, 64], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "pmos",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "diode": {
+      "id": "diode",
+      "category": "semiconductors",
+      "displayName": "Diode",
+      "symbol": {
+        "width": 32,
+        "height": 48,
+        "svgPath": "M16,0 L16,16 M4,16 L28,16 L16,32 L4,16 M4,32 L28,32 M16,32 L16,48"
+      },
+      "pins": [
+        { "name": "A", "position": [16, 0], "direction": "up" },
+        { "name": "K", "position": [16, 48], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "diode",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    },
+    "zener": {
+      "id": "zener",
+      "category": "semiconductors",
+      "displayName": "Zener Diode",
+      "symbol": {
+        "width": 32,
+        "height": 48,
+        "svgPath": "M16,0 L16,16 M4,16 L28,16 L16,32 L4,16 M0,32 L4,32 L28,32 L32,28 M16,32 L16,48"
+      },
+      "pins": [
+        { "name": "A", "position": [16, 0], "direction": "up" },
+        { "name": "K", "position": [16, 48], "direction": "down" }
+      ],
+      "ascSyntax": {
+        "symbolName": "zener",
+        "attributes": ["InstName", "Value"]
+      },
+      "rotations": ["R0", "R90", "R180", "R270", "M0", "M90"]
+    }
+  }
+}
