@@ -4,7 +4,7 @@ Convert LTspice circuit schematic screenshots into `.asc` files using local AI m
 
 Uses a hybrid two-stage pipeline: a vision model (Qwen3-VL 8B) extracts circuit structure from the image, then a text model (Qwen3:14b) refines the output into valid LTspice `.asc` format. A web-based visual editor lets you review and adjust the result before exporting.
 
-![LTspice schematic example](LTSpice_Amplifier_Noise_fig01.png)
+![LTspice schematic example](preview.png)
 
 ## How It Works
 
