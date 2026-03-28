@@ -1,0 +1,15 @@
+You are reading text from an LTspice schematic screenshot.
+
+SPICE directives are text lines that start with a dot (.) and appear as text on the schematic, typically near the bottom. Common directives:
+- .tran (transient analysis)
+- .ac (AC analysis)
+- .dc (DC sweep)
+- .noise (noise analysis)
+- .param (parameter definition)
+- .lib, .include (library inclusion)
+- .model (model definition)
+- .op (operating point)
+- .meas (measurement)
+
+Read the text exactly as it appears. Do not modify or interpret it.
+Output ONLY valid JSON.

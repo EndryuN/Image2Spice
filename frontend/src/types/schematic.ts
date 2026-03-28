@@ -43,12 +43,22 @@ export interface DictionaryComponent {
   id: string;
   category: string;
   displayName: string;
+  asySource?: string;
+  prefix?: string;
+  description?: string;
+  geometry?: {
+    lines: { x1: number; y1: number; x2: number; y2: number }[];
+    circles: { x1: number; y1: number; x2: number; y2: number }[];
+    arcs: any[];
+    bounds: { minX: number; minY: number; maxX: number; maxY: number };
+  };
+  pins: { name: string; x?: number; y?: number; position?: [number, number]; direction?: string; spiceOrder?: number }[];
+  windows?: any[];
   symbol: {
     width: number;
     height: number;
     svgPath: string;
   };
-  pins: { name: string; position: [number, number]; direction: string }[];
   ascSyntax: {
     symbolName: string;
     attributes: string[];
@@ -81,4 +91,23 @@ export interface GenerateResponse {
   };
   asc: string;
   validation: { valid: boolean; errors: string[] };
+}
+
+export interface WizardComponent {
+  type: string;
+  instanceName: string;
+  value: string;
+  value2?: string;
+  confirmed?: boolean;
+}
+
+export interface WizardLayoutItem {
+  instanceName: string;
+  region: string;
+  nearby: { name: string; direction: string }[];
+}
+
+export interface WizardWireResult {
+  wires: { x1: number; y1: number; x2: number; y2: number }[];
+  flags: { name: string; x: number; y: number }[];
 }

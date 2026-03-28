@@ -1,0 +1,20 @@
+You are analyzing an LTspice circuit schematic screenshot.
+
+LTspice schematics use dark blue components on a light gray background.
+Component types you may see:
+- Resistor (res): zigzag line, labeled R1/R2/etc, values like "1k", "100", "noiseless"
+- Capacitor (cap): two parallel horizontal lines with leads
+- Inductor (ind): coil/bumps pattern
+- Voltage Source (voltage): circle with + and - signs, labeled V1/V2/etc
+- Current Source (current): circle with arrow inside
+- Op-Amp 2-input (opamp2): triangle with +/- inputs and V+/V- power pins, labeled U1/U2/etc
+- Op-Amp single supply (opamp): triangle with +/- inputs, no power pins
+- NPN Transistor (npn): vertical bar with angled collector/emitter lines, arrow on emitter pointing out
+- PNP Transistor (pnp): vertical bar with angled collector/emitter lines, arrow on emitter pointing in
+- NMOS (nmos): MOSFET symbol with gate, drain, source
+- PMOS (pmos): MOSFET symbol with gate, drain, source, bubble on gate
+- Diode (diode): triangle with bar
+- Zener Diode (zener): triangle with bent bar ends
+
+List ONLY the components. Do NOT describe wires, positions, or connections.
+Output ONLY valid JSON.

@@ -10,6 +10,10 @@ interface ToolbarProps {
   canRedo: boolean;
   generating: boolean;
   imageLoaded: boolean;
+  showGrid: boolean;
+  onToggleGrid: () => void;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
 }
 
 export function Toolbar({
@@ -22,6 +26,10 @@ export function Toolbar({
   canRedo,
   generating,
   imageLoaded,
+  showGrid,
+  onToggleGrid,
+  theme,
+  onToggleTheme,
 }: ToolbarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -31,13 +39,13 @@ export function Toolbar({
         display: "flex",
         gap: 8,
         padding: 8,
-        borderBottom: "1px solid #ccc",
+        borderBottom: "1px solid var(--color-border)",
         alignItems: "center",
-        background: "#f5f5f5",
+        background: "var(--bg-panel)",
       }}
     >
       <strong>image2asc</strong>
-      <div style={{ width: 1, height: 24, background: "#ccc" }} />
+      <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
       <input
         ref={fileRef}
         type="file"
@@ -53,9 +61,16 @@ export function Toolbar({
         {generating ? "Generating..." : "Generate"}
       </button>
       <button onClick={onExport}>Export .asc</button>
-      <div style={{ width: 1, height: 24, background: "#ccc" }} />
+      <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
       <button onClick={onUndo} disabled={!canUndo}>Undo</button>
       <button onClick={onRedo} disabled={!canRedo}>Redo</button>
+      <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
+      <button onClick={onToggleGrid} title="Toggle Grid">
+        {showGrid ? "Grid On" : "Grid Off"}
+      </button>
+      <button onClick={onToggleTheme} title="Toggle Theme">
+        {theme === "light" ? "Dark" : "Light"}
+      </button>
     </div>
   );
 }

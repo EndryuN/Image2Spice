@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
+from api.wizard_routes import router as wizard_router
 
 app = FastAPI(title="image2asc")
 
@@ -12,6 +13,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(wizard_router)
 
 
 @app.get("/api/health")

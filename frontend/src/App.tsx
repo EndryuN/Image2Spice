@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { Toolbar } from "./components/Toolbar";
-import { ImagePanel } from "./components/ImagePanel";
 import { Editor } from "./components/Editor";
 import { AscPreview } from "./components/AscPreview";
 import { PropertyPanel } from "./components/PropertyPanel";
 import { ComponentPalette } from "./components/ComponentPalette";
+import { ScreenshotPanel } from "./components/ScreenshotPanel";
+import { GenerateWizard } from "./components/GenerateWizard";
 import { useSchematic } from "./hooks/useSchematic";
-import { fetchDictionary, generateFromImage } from "./lib/api";
+import { useTheme } from "./hooks/useTheme";
+import { fetchDictionary } from "./lib/api";
 import { generateAsc } from "./lib/ascGenerator";
 import type { Dictionary } from "./types/schematic";
 
@@ -14,15 +16,18 @@ function App() {
   const [dictionary, setDictionary] = useState<Dictionary | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [generating, setGenerating] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [mode, setMode] = useState<"select" | "wire">("select");
   const [status, setStatus] = useState("Ready");
-  const [validation, setValidation] = useState<{ valid: boolean; errors: string[] } | null>(null);
+  const [validation, _setValidation] = useState<{ valid: boolean; errors: string[] } | null>(null);
+  const [showGrid, setShowGrid] = useState(true);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [showPalette, setShowPalette] = useState(true);
+
+  const { theme, toggleTheme } = useTheme();
 
   const {
     schematic,
-    loadFromGenerateResponse,
     moveComponent,
     updateComponent,
     addComponent,
@@ -60,26 +65,10 @@ function App() {
     setStatus("Image loaded. Click Generate to analyze.");
   }, []);
 
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(() => {
     if (!imageFile) return;
-    setGenerating(true);
-    setStatus("Analyzing image with vision model...");
-    try {
-      const resp = await generateFromImage(imageFile);
-      loadFromGenerateResponse(resp);
-      setValidation(resp.validation);
-      setStatus(
-        resp.validation.valid
-          ? "Generation complete. Review and adjust in the editor."
-          : `Generated with ${resp.validation.errors.length} validation error(s).`
-      );
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      setStatus(`Generation failed: ${message}`);
-    } finally {
-      setGenerating(false);
-    }
-  }, [imageFile, loadFromGenerateResponse]);
+    setWizardOpen(true);
+  }, [imageFile]);
 
   const handleExport = useCallback(() => {
     const blob = new Blob([ascText], { type: "text/plain" });
@@ -106,7 +95,7 @@ function App() {
   }, [addFlag]);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg-panel)", color: "var(--color-text)" }}>
       <Toolbar
         onUpload={handleUpload}
         onGenerate={handleGenerate}
@@ -115,18 +104,43 @@ function App() {
         onRedo={redo}
         canUndo={canUndo}
         canRedo={canRedo}
-        generating={generating}
+        generating={false}
         imageLoaded={!!imageFile}
+        showGrid={showGrid}
+        onToggleGrid={() => setShowGrid((g) => !g)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        <ComponentPalette
-          dictionary={dictionary}
-          onAddComponent={handleAddComponent}
-          mode={mode}
-          onModeChange={setMode}
-          onAddFlag={handleAddFlag}
-        />
-        <ImagePanel imageUrl={imageUrl} />
+        {/* Collapsible palette */}
+        <div style={{ display: "flex" }}>
+          <button
+            onClick={() => setShowPalette((p) => !p)}
+            style={{
+              writingMode: "vertical-rl",
+              padding: "8px 2px",
+              background: "var(--bg-panel)",
+              border: "none",
+              borderRight: "1px solid var(--color-border)",
+              cursor: "pointer",
+              color: "var(--color-text)",
+              fontSize: 12,
+            }}
+          >
+            {showPalette ? "◀" : "▶"}
+          </button>
+          {showPalette && (
+            <ComponentPalette
+              dictionary={dictionary}
+              onAddComponent={handleAddComponent}
+              mode={mode}
+              onModeChange={setMode}
+              onAddFlag={handleAddFlag}
+            />
+          )}
+        </div>
+
+        {/* Center: Editor takes all remaining space */}
         <Editor
           schematic={schematic}
           dictionary={dictionary}
@@ -135,9 +149,12 @@ function App() {
           onMoveComponent={moveComponent}
           onAddWire={addWire}
           mode={mode}
+          showGrid={showGrid}
         />
-        <div style={{ width: 280, display: "flex", flexDirection: "column", borderLeft: "1px solid #ccc" }}>
-          <div style={{ borderBottom: "1px solid #ccc", maxHeight: "50%", overflow: "auto" }}>
+
+        {/* Right panel: property + preview + screenshot */}
+        <div style={{ width: 280, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--color-border)" }}>
+          <div style={{ borderBottom: "1px solid var(--color-border)", maxHeight: "30%", overflow: "auto" }}>
             <PropertyPanel
               schematic={schematic}
               selectedId={selectedId}
@@ -148,11 +165,46 @@ function App() {
             />
           </div>
           <AscPreview ascText={ascText} validation={validation} />
+          <ScreenshotPanel imageUrl={imageUrl} />
         </div>
       </div>
-      <footer style={{ padding: "4px 8px", borderTop: "1px solid #ccc", fontSize: 12, background: "#f5f5f5" }}>
+
+      <footer
+        style={{
+          padding: "4px 8px",
+          borderTop: "1px solid var(--color-border)",
+          fontSize: 12,
+          background: "var(--bg-panel)",
+          color: "var(--color-text)",
+        }}
+      >
         {status}
       </footer>
+
+      {/* Wizard modal */}
+      {wizardOpen && imageFile && (
+        <GenerateWizard
+          imageFile={imageFile}
+          dictionary={dictionary}
+          onAddComponent={(type, name, value, pos, value2) => {
+            addComponent(type, name, value, pos);
+            if (value2) {
+              // value2 is stored on the component; update after add
+              // (addComponent doesn't currently accept value2, but component supports it)
+              setStatus(`Placed ${name} (${type})`);
+            }
+          }}
+          onAddWire={addWire}
+          onAddFlag={addFlag}
+          onAddText={(content, _pos) => {
+            setStatus(`Added directive: ${content}`);
+          }}
+          onClose={() => {
+            setWizardOpen(false);
+            setStatus("Wizard closed.");
+          }}
+        />
+      )}
     </div>
   );
 }

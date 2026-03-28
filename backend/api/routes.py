@@ -1,11 +1,9 @@
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from services.vision import analyze_image
-from services.refinement import refine_to_asc
 from services.asc_generator import SchematicIR, generate_asc
 from services.validator import validate_asc
 
@@ -23,29 +21,6 @@ async def get_dictionary():
         (DICTIONARY_DIR / "directives.json").read_text(encoding="utf-8")
     )
     return {"components": components["components"], "directives": directives}
-
-
-class GenerateResponse(BaseModel):
-    ir: dict
-    asc: str
-    validation: dict
-
-
-@router.post("/generate", response_model=GenerateResponse)
-async def generate(file: UploadFile = File(...)):
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(400, "File must be an image")
-
-    image_bytes = await file.read()
-    ir, raw_json = await analyze_image(image_bytes)
-    asc_text = await refine_to_asc(ir)
-    validation = validate_asc(asc_text)
-
-    return GenerateResponse(
-        ir=raw_json,
-        asc=asc_text,
-        validation={"valid": validation.valid, "errors": validation.errors},
-    )
 
 
 class RefineRequest(BaseModel):

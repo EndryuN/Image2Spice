@@ -24,7 +24,7 @@ async def chat_with_vision(
         "stream": False,
         "options": {"temperature": 0.1},
     }
-    async with httpx.AsyncClient(timeout=300.0) as client:
+    async with httpx.AsyncClient(timeout=600.0) as client:
         resp = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
         resp.raise_for_status()
         return resp.json()["message"]["content"]
@@ -44,7 +44,7 @@ async def chat_text(
         "stream": False,
         "options": {"temperature": 0.1},
     }
-    async with httpx.AsyncClient(timeout=300.0) as client:
+    async with httpx.AsyncClient(timeout=600.0) as client:
         resp = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
         resp.raise_for_status()
         return resp.json()["message"]["content"]

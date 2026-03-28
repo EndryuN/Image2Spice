@@ -1,0 +1,6 @@
+You are describing the spatial layout of components in an LTspice schematic.
+
+Use a coordinate system where (0,0) is the top-left of the schematic.
+Describe positions using grid regions: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right.
+Also describe relative positions between components (e.g. "R5 is directly above U1", "V1 is to the right of U1").
+Output ONLY valid JSON.

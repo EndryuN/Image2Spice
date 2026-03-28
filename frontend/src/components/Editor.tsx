@@ -14,6 +14,7 @@ interface EditorProps {
   onMoveComponent: (id: string, pos: Position) => void;
   onAddWire: (from: Position, to: Position) => void;
   mode: "select" | "wire";
+  showGrid: boolean;
 }
 
 export function Editor({
@@ -24,6 +25,7 @@ export function Editor({
   onMoveComponent,
   onAddWire,
   mode,
+  showGrid,
 }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 880, h: 680 });
@@ -40,6 +42,19 @@ export function Editor({
     startVX: number;
     startVY: number;
   } | null>(null);
+
+  function getRotationTransform(rotation: string, width: number, height: number): string {
+    const cx = width / 2;
+    const cy = height / 2;
+    switch (rotation) {
+      case "R90": return `rotate(90, ${cx}, ${cy})`;
+      case "R180": return `rotate(180, ${cx}, ${cy})`;
+      case "R270": return `rotate(270, ${cx}, ${cy})`;
+      case "M0": return `translate(${width}, 0) scale(-1, 1)`;
+      case "M90": return `translate(${width}, 0) scale(-1, 1) rotate(90, ${cx}, ${cy})`;
+      default: return "";
+    }
+  }
 
   const svgPoint = useCallback(
     (clientX: number, clientY: number): Position => {
@@ -167,6 +182,9 @@ export function Editor({
   const renderComponent = (comp: Component) => {
     const dictComp = dictionary?.components[comp.type];
     const isSelected = comp.id === selectedId;
+    const rotTransform = dictComp
+      ? getRotationTransform(comp.rotation, dictComp.symbol.width, dictComp.symbol.height)
+      : "";
     return (
       <g
         key={comp.id}
@@ -179,21 +197,25 @@ export function Editor({
             x={-4} y={-4}
             width={dictComp.symbol.width + 8}
             height={dictComp.symbol.height + 8}
-            fill="none" stroke="#2196F3" strokeWidth={2} strokeDasharray="4,4"
+            fill="none" stroke="var(--color-selection)" strokeWidth={2} strokeDasharray="4,4"
           />
         )}
-        {dictComp ? (
-          <path d={dictComp.symbol.svgPath} fill="none" stroke="#0000CC" strokeWidth={2} />
-        ) : (
-          <rect width={64} height={32} fill="none" stroke="#0000CC" strokeWidth={2} />
-        )}
-        {dictComp?.pins.map((pin) => (
-          <circle key={pin.name} cx={pin.position[0]} cy={pin.position[1]} r={3} fill="#0000CC" />
-        ))}
-        <text x={dictComp ? dictComp.symbol.width / 2 : 32} y={-8} textAnchor="middle" fontSize={12} fill="#0000CC">
+        <g transform={rotTransform}>
+          {dictComp ? (
+            <path d={dictComp.symbol.svgPath} fill="none" stroke="var(--color-component)" strokeWidth={2} />
+          ) : (
+            <rect width={64} height={32} fill="none" stroke="var(--color-component)" strokeWidth={2} />
+          )}
+          {dictComp?.pins.map((pin) => (
+            pin.position ? (
+              <circle key={pin.name} cx={pin.position[0]} cy={pin.position[1]} r={3} fill="var(--color-component)" />
+            ) : null
+          ))}
+        </g>
+        <text x={dictComp ? dictComp.symbol.width / 2 : 32} y={-8} textAnchor="middle" fontSize={12} fill="var(--color-component)">
           {comp.instanceName}
         </text>
-        <text x={dictComp ? dictComp.symbol.width / 2 : 32} y={(dictComp?.symbol.height ?? 32) + 14} textAnchor="middle" fontSize={10} fill="#0000CC">
+        <text x={dictComp ? dictComp.symbol.width / 2 : 32} y={(dictComp?.symbol.height ?? 32) + 14} textAnchor="middle" fontSize={10} fill="var(--color-component)">
           {comp.value}
         </text>
       </g>
@@ -204,7 +226,7 @@ export function Editor({
     <svg
       ref={svgRef}
       viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
-      style={{ flex: 2, background: "#e8e8e8", cursor: mode === "wire" ? "crosshair" : "default" }}
+      style={{ flex: 2, background: "var(--bg-editor)", cursor: mode === "wire" ? "crosshair" : "default" }}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
@@ -212,15 +234,17 @@ export function Editor({
     >
       <defs>
         <pattern id="grid" width={16} height={16} patternUnits="userSpaceOnUse">
-          <circle cx={0} cy={0} r={0.5} fill="#ccc" />
+          <circle cx={0} cy={0} r={0.5} fill="var(--color-grid)" />
         </pattern>
       </defs>
-      <rect x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} fill="url(#grid)" />
+      {showGrid && (
+        <rect x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} fill="url(#grid)" />
+      )}
       {schematic.wires.map((wire) => (
         <line
           key={wire.id}
           x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
-          stroke="#0000CC" strokeWidth={2}
+          stroke="var(--color-component)" strokeWidth={2}
           onClick={(e) => { e.stopPropagation(); onSelect(wire.id); }}
           style={{ cursor: "pointer" }}
         />
@@ -228,7 +252,7 @@ export function Editor({
       {wireStart && wirePreview && (
         <line
           x1={wireStart.x} y1={wireStart.y} x2={wirePreview.x} y2={wirePreview.y}
-          stroke="#2196F3" strokeWidth={1} strokeDasharray="4,4" pointerEvents="none"
+          stroke="var(--color-selection)" strokeWidth={1} strokeDasharray="4,4" pointerEvents="none"
         />
       )}
       {schematic.components.map(renderComponent)}
@@ -236,24 +260,33 @@ export function Editor({
         <g key={flag.id} transform={`translate(${flag.position.x}, ${flag.position.y})`}>
           {flag.name === "0" ? (
             <>
-              <line x1={0} y1={0} x2={0} y2={10} stroke="#0000CC" strokeWidth={2} />
-              <line x1={-10} y1={10} x2={10} y2={10} stroke="#0000CC" strokeWidth={2} />
-              <line x1={-6} y1={14} x2={6} y2={14} stroke="#0000CC" strokeWidth={2} />
-              <line x1={-2} y1={18} x2={2} y2={18} stroke="#0000CC" strokeWidth={2} />
+              <line x1={0} y1={0} x2={0} y2={10} stroke="var(--color-component)" strokeWidth={2} />
+              <line x1={-10} y1={10} x2={10} y2={10} stroke="var(--color-component)" strokeWidth={2} />
+              <line x1={-6} y1={14} x2={6} y2={14} stroke="var(--color-component)" strokeWidth={2} />
+              <line x1={-2} y1={18} x2={2} y2={18} stroke="var(--color-component)" strokeWidth={2} />
             </>
           ) : (
             <>
-              <line x1={0} y1={0} x2={0} y2={-5} stroke="#0000CC" strokeWidth={1} />
-              <text x={2} y={-8} fontSize={11} fill="#0000CC">{flag.name}</text>
+              <line x1={0} y1={0} x2={0} y2={-5} stroke="var(--color-component)" strokeWidth={1} />
+              <text x={2} y={-8} fontSize={11} fill="var(--color-component)">{flag.name}</text>
             </>
           )}
         </g>
       ))}
       {schematic.text.map((t) => (
-        <text key={t.id} x={t.position.x} y={t.position.y} fontSize={11} fill="#333">
+        <text key={t.id} x={t.position.x} y={t.position.y} fontSize={11} fill="var(--color-text)">
           {t.content}
         </text>
       ))}
+      <text
+        x={viewBox.x + 10}
+        y={viewBox.y + viewBox.h - 10}
+        fontSize={14 * (viewBox.w / 880)}
+        fill="var(--color-text-muted)"
+        pointerEvents="none"
+      >
+        {Math.round((880 / viewBox.w) * 100)}%
+      </text>
     </svg>
   );
 }
