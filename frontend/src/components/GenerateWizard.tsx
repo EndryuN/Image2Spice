@@ -503,9 +503,9 @@ export function GenerateWizard({
                       <tr
                         key={idx}
                         style={{
-                          background: comp.confirmed
-                            ? "var(--color-success-bg, #e8f5e9)"
-                            : "transparent",
+                          borderLeft: comp.confirmed
+                            ? "3px solid #4caf50"
+                            : "3px solid transparent",
                         }}
                       >
                         <td style={tdStyle}>

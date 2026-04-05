@@ -25,7 +25,10 @@ def _load_prompt(filename: str) -> str:
 
 
 def _extract_json(text: str) -> dict | list:
-    """Extract JSON from model response, handling markdown code fences."""
+    """Extract JSON from model response, handling markdown code fences and think tags."""
+    # Strip <think>...</think> blocks (qwen3 models include reasoning)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
     match = re.search(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
     if match:
         return json.loads(match.group(1).strip())
