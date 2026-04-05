@@ -10,7 +10,7 @@ import { useSchematic } from "./hooks/useSchematic";
 import { useTheme } from "./hooks/useTheme";
 import { fetchDictionary } from "./lib/api";
 import { generateAsc } from "./lib/ascGenerator";
-import type { Dictionary } from "./types/schematic";
+import type { Dictionary, LlmProvider } from "./types/schematic";
 
 function App() {
   const [dictionary, setDictionary] = useState<Dictionary | null>(null);
@@ -23,6 +23,7 @@ function App() {
   const [showGrid, setShowGrid] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [showPalette, setShowPalette] = useState(true);
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>({ provider: "local", model: "qwen3-vl:8b" });
 
   const { theme, toggleTheme } = useTheme();
 
@@ -110,6 +111,8 @@ function App() {
         onToggleGrid={() => setShowGrid((g) => !g)}
         theme={theme}
         onToggleTheme={toggleTheme}
+        llmProvider={llmProvider}
+        onProviderChange={setLlmProvider}
       />
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Collapsible palette */}
@@ -186,6 +189,7 @@ function App() {
         <GenerateWizard
           imageFile={imageFile}
           dictionary={dictionary}
+          llmProvider={llmProvider}
           onAddComponent={(type, name, value, pos, value2) => {
             addComponent(type, name, value, pos);
             if (value2) {

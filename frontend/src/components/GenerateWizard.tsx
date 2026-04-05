@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { Dictionary, WizardComponent } from "../types/schematic";
+import type { Dictionary, WizardComponent, LlmProvider } from "../types/schematic";
 import {
   wizardIdentify,
   wizardDirectives,
@@ -21,6 +21,7 @@ interface GenerateWizardProps {
   onAddFlag: (name: string, pos: { x: number; y: number }) => void;
   onAddText: (content: string, pos: { x: number; y: number }) => void;
   onClose: () => void;
+  llmProvider: LlmProvider;
 }
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6; // 6 = done
@@ -33,6 +34,7 @@ export function GenerateWizard({
   onAddFlag,
   onAddText,
   onClose,
+  llmProvider,
 }: GenerateWizardProps) {
   const [step, setStep] = useState<Step>(1);
   const [minimized, setMinimized] = useState(false);
@@ -81,7 +83,7 @@ export function GenerateWizard({
     setLoading(true);
     setError(null);
     try {
-      const result = await wizardIdentify(imageFile);
+      const result = await wizardIdentify(imageFile, llmProvider);
       setComponents(
         result.components.map((c) => ({ ...c, confirmed: false }))
       );
@@ -91,13 +93,13 @@ export function GenerateWizard({
     } finally {
       setLoading(false);
     }
-  }, [imageFile]);
+  }, [imageFile, llmProvider]);
 
   const goStep2to3 = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await wizardDirectives(imageFile);
+      const result = await wizardDirectives(imageFile, llmProvider);
       setDirectives(result.directives);
       setStep(3);
     } catch (e: unknown) {
@@ -105,14 +107,14 @@ export function GenerateWizard({
     } finally {
       setLoading(false);
     }
-  }, [imageFile]);
+  }, [imageFile, llmProvider]);
 
   const goStep3to4 = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const confirmed = components.filter((c) => c.confirmed !== false);
-      const result = await wizardLayout(imageFile, confirmed);
+      const result = await wizardLayout(imageFile, confirmed, llmProvider);
       setPositions(result.positions);
 
       // Place confirmed components in the editor
@@ -132,14 +134,14 @@ export function GenerateWizard({
     } finally {
       setLoading(false);
     }
-  }, [imageFile, components, directives, onAddComponent, onAddText]);
+  }, [imageFile, components, directives, onAddComponent, onAddText, llmProvider]);
 
   const goStep4to5 = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const confirmed = components.filter((c) => c.confirmed !== false);
-      const result = await wizardWires(imageFile, confirmed, positions);
+      const result = await wizardWires(imageFile, confirmed, positions, llmProvider);
 
       result.wires.forEach((w) => {
         onAddWire({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
@@ -159,7 +161,7 @@ export function GenerateWizard({
     } finally {
       setLoading(false);
     }
-  }, [imageFile, components, positions, onAddWire, onAddFlag]);
+  }, [imageFile, components, positions, onAddWire, onAddFlag, llmProvider]);
 
   // ── Component row helpers ───────────────────────────────────────────────────
 
