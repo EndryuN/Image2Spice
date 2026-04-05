@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import base64
+import logging
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -93,6 +96,9 @@ async def _call_openrouter(
             headers=headers,
         )
         if resp.status_code != 200:
+            logger.error("OpenRouter error %d: %s", resp.status_code, resp.text[:500])
             raise ValueError(f"OpenRouter error ({resp.status_code}): {resp.text[:500]}")
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        content = data["choices"][0]["message"]["content"]
+        logger.info("OpenRouter response (%d chars): %s...", len(content), content[:100])
+        return content
