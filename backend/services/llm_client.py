@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 
@@ -9,6 +10,16 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+# Free vision models to try in order if the primary is rate-limited
+OPENROUTER_FALLBACKS = [
+    "qwen/qwen3.6-plus:free",
+    "google/gemma-3-27b-it:free",
+    "google/gemma-3-12b-it:free",
+]
+
+_MAX_RETRIES = 3
+_RETRY_DELAYS = [5, 15, 30]  # seconds
 
 
 async def chat_with_vision(
@@ -24,7 +35,7 @@ async def chat_with_vision(
     elif provider == "openrouter":
         if not api_key:
             raise ValueError("API key is required for OpenRouter provider")
-        return await _call_openrouter(model, system_prompt, user_prompt, image_bytes, api_key)
+        return await _call_openrouter_with_retry(model, system_prompt, user_prompt, image_bytes, api_key)
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
@@ -53,6 +64,41 @@ async def _call_ollama(
         resp = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
         resp.raise_for_status()
         return resp.json()["message"]["content"]
+
+
+async def _call_openrouter_with_retry(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    image_bytes: bytes,
+    api_key: str,
+) -> str:
+    """Try the requested model with retries, then fall back to other free models."""
+    # Build model list: requested model first, then fallbacks (avoiding duplicates)
+    models_to_try = [model] + [m for m in OPENROUTER_FALLBACKS if m != model]
+
+    last_error = None
+    for try_model in models_to_try:
+        for attempt in range(_MAX_RETRIES):
+            try:
+                return await _call_openrouter(try_model, system_prompt, user_prompt, image_bytes, api_key)
+            except ValueError as exc:
+                last_error = exc
+                error_str = str(exc)
+                if "429" in error_str:
+                    if attempt < _MAX_RETRIES - 1:
+                        delay = _RETRY_DELAYS[attempt]
+                        logger.warning("Rate limited on %s, retrying in %ds (attempt %d/%d)",
+                                       try_model, delay, attempt + 1, _MAX_RETRIES)
+                        await asyncio.sleep(delay)
+                    else:
+                        logger.warning("Rate limited on %s after %d retries, trying next model",
+                                       try_model, _MAX_RETRIES)
+                        break  # try next model
+                else:
+                    raise  # non-429 error, don't retry
+
+    raise ValueError(f"All models rate-limited. Last error: {last_error}")
 
 
 async def _call_openrouter(
@@ -96,9 +142,9 @@ async def _call_openrouter(
             headers=headers,
         )
         if resp.status_code != 200:
-            logger.error("OpenRouter error %d: %s", resp.status_code, resp.text[:500])
+            logger.error("OpenRouter error %d on %s: %s", resp.status_code, model, resp.text[:500])
             raise ValueError(f"OpenRouter error ({resp.status_code}): {resp.text[:500]}")
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
-        logger.info("OpenRouter response (%d chars): %s...", len(content), content[:100])
+        logger.info("OpenRouter [%s] response (%d chars): %s...", model, len(content), content[:100])
         return content
