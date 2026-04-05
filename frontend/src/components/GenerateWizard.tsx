@@ -26,6 +26,22 @@ interface GenerateWizardProps {
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6; // 6 = done
 
+const VALUE_HINTS: Record<string, string> = {
+  res: "e.g. 10k, 1M, 100, {param}",
+  cap: "e.g. 100n, 1u, 10p",
+  ind: "e.g. 10u, 1m, 100n",
+  voltage: "e.g. 5, AC 1, PULSE(...), {param}",
+  current: "e.g. 1m, AC 0.01",
+  diode: "e.g. 1N4148, D",
+  zener: "e.g. 1N4733, D",
+  npn: "e.g. 2N2222, BC547",
+  pnp: "e.g. 2N3906, BC557",
+  nmos: "e.g. 2N7000, IRF540",
+  pmos: "e.g. IRF9540",
+  opamp: "e.g. LM358, UniversalOpamp2",
+  opamp2: "e.g. LM358, ADA4627",
+};
+
 export function GenerateWizard({
   imageFile,
   dictionary,
@@ -523,6 +539,7 @@ export function GenerateWizard({
                         <td style={tdStyle}>
                           <input
                             value={comp.value}
+                            placeholder={VALUE_HINTS[comp.type] ?? ""}
                             onChange={(e) => updateComp(idx, { value: e.target.value })}
                             style={inputStyle}
                           />
