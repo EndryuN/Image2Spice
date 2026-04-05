@@ -111,3 +111,9 @@ export interface WizardWireResult {
   wires: { x1: number; y1: number; x2: number; y2: number }[];
   flags: { name: string; x: number; y: number }[];
 }
+
+export interface LlmProvider {
+  provider: "local" | "openrouter";
+  model: string;
+  apiKey?: string;
+}
