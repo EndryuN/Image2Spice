@@ -13,16 +13,27 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   const checkHealth = useCallback(() => {
+    // For openrouter, don't auto-check — require explicit Connect
+    if (provider.provider === "openrouter") return;
     setOnline(null);
     checkLlmHealth(provider.provider).then(setOnline);
   }, [provider.provider]);
 
-  // Check health on mount and when provider changes
+  const connectOpenRouter = useCallback(() => {
+    if (!provider.apiKey) return;
+    setOnline(null);
+    checkLlmHealth(provider.provider, provider.apiKey).then(setOnline);
+  }, [provider.provider, provider.apiKey]);
+
+  // Auto-check for local only; reset status when switching providers
   useEffect(() => {
-    checkHealth();
-    const interval = setInterval(checkHealth, 30000);
-    return () => clearInterval(interval);
-  }, [checkHealth]);
+    setOnline(null);
+    if (provider.provider === "local") {
+      checkHealth();
+      const interval = setInterval(checkHealth, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [provider.provider, checkHealth]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -41,6 +52,17 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
 
   const dotColor =
     online === null ? "var(--color-text-muted, #888)" : online ? "#4caf50" : "#f44336";
+
+  const statusText =
+    provider.provider === "openrouter" && online === null && !provider.apiKey
+      ? "Enter API key"
+      : provider.provider === "openrouter" && online === null
+      ? "Click Connect"
+      : online === null
+      ? "checking..."
+      : online
+      ? "connected"
+      : "offline";
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
@@ -95,22 +117,24 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
-              Status: {online === null ? "checking..." : online ? "connected" : "offline"}
+              Status: {statusText}
             </span>
-            <button
-              onClick={checkHealth}
-              style={{
-                padding: "2px 8px",
-                border: "1px solid var(--color-border)",
-                borderRadius: 4,
-                background: "var(--bg-canvas)",
-                color: "var(--color-text)",
-                cursor: "pointer",
-                fontSize: 11,
-              }}
-            >
-              Refresh
-            </button>
+            {provider.provider === "local" && (
+              <button
+                onClick={checkHealth}
+                style={{
+                  padding: "2px 8px",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 4,
+                  background: "var(--bg-canvas)",
+                  color: "var(--color-text)",
+                  cursor: "pointer",
+                  fontSize: 11,
+                }}
+              >
+                Refresh
+              </button>
+            )}
           </div>
 
           <div>
@@ -164,27 +188,48 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
           </div>
 
           {provider.provider === "openrouter" && (
-            <div>
-              <div style={{ marginBottom: 4, fontWeight: "bold", color: "var(--color-text)" }}>API Key</div>
-              <input
-                type="password"
-                value={provider.apiKey ?? ""}
-                onChange={(e) =>
-                  onProviderChange({ ...provider, apiKey: e.target.value })
-                }
-                placeholder="sk-or-..."
+            <>
+              <div>
+                <div style={{ marginBottom: 4, fontWeight: "bold", color: "var(--color-text)" }}>API Key</div>
+                <input
+                  type="password"
+                  value={provider.apiKey ?? ""}
+                  onChange={(e) => {
+                    setOnline(null);
+                    onProviderChange({ ...provider, apiKey: e.target.value });
+                  }}
+                  placeholder="sk-or-..."
+                  style={{
+                    width: "100%",
+                    padding: "4px 8px",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 4,
+                    background: "var(--bg-canvas)",
+                    color: "var(--color-text)",
+                    fontSize: 12,
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+              <button
+                onClick={connectOpenRouter}
+                disabled={!provider.apiKey}
                 style={{
-                  width: "100%",
-                  padding: "4px 8px",
-                  border: "1px solid var(--color-border)",
+                  padding: "6px 12px",
+                  border: "none",
                   borderRadius: 4,
-                  background: "var(--bg-canvas)",
-                  color: "var(--color-text)",
+                  background: provider.apiKey
+                    ? "var(--color-accent, #1976d2)"
+                    : "var(--color-border)",
+                  color: provider.apiKey ? "#fff" : "var(--color-text-muted)",
+                  cursor: provider.apiKey ? "pointer" : "default",
                   fontSize: 12,
-                  boxSizing: "border-box",
+                  fontWeight: "bold",
                 }}
-              />
-            </div>
+              >
+                Connect
+              </button>
+            </>
           )}
         </div>
       )}

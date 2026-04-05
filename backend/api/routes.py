@@ -14,8 +14,8 @@ DICTIONARY_DIR = Path(__file__).parent.parent.parent / "dictionary"
 
 
 @router.get("/llm-status")
-async def llm_status(provider: str = "local"):
-    """Check if the LLM provider is reachable."""
+async def llm_status(provider: str = "local", api_key: str = ""):
+    """Check if the LLM provider is reachable and authenticated."""
     if provider == "local":
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
@@ -25,13 +25,20 @@ async def llm_status(provider: str = "local"):
         except Exception:
             return {"online": False}
     elif provider == "openrouter":
+        if not api_key:
+            return {"online": False, "error": "No API key provided"}
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get("https://openrouter.ai/api/v1/models",
-                                        params={"limit": "1"})
-                return {"online": resp.status_code == 200}
-        except Exception:
-            return {"online": False}
+                resp = await client.get(
+                    "https://openrouter.ai/api/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                    params={"limit": "1"},
+                )
+                if resp.status_code == 200:
+                    return {"online": True}
+                return {"online": False, "error": f"API returned {resp.status_code}"}
+        except Exception as exc:
+            return {"online": False, "error": str(exc)}
     return {"online": False}
 
 
