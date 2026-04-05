@@ -3,7 +3,7 @@ import logging
 import re
 from pathlib import Path
 
-from services.ollama_client import chat_with_vision
+from services.llm_client import chat_with_vision
 from services.schemas import (
     IdentifyResponse,
     DirectivesResponse,
@@ -13,7 +13,10 @@ from services.schemas import (
 
 logger = logging.getLogger(__name__)
 
-VISION_MODEL = "qwen3-vl:8b"
+VISION_MODELS = {
+    "local": "qwen3-vl:8b",
+    "openrouter": "qwen/qwen3.6-plus:free",
+}
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
 
@@ -39,7 +42,12 @@ def _extract_json(text: str) -> dict | list:
     raise ValueError(f"Could not extract JSON from response: {text[:200]}")
 
 
-async def identify_components(image_bytes: bytes) -> list[dict]:
+async def identify_components(
+    image_bytes: bytes,
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> list[dict]:
     """Step 2: Identify components in the image."""
     system = _load_prompt("identify_system.txt")
     user = (
@@ -50,14 +58,20 @@ async def identify_components(image_bytes: bytes) -> list[dict]:
         "- value2 (only for voltage sources with a second value, otherwise omit)\n\n"
         'Output as JSON array:\n[{"type": "res", "instanceName": "R1", "value": "1k"}, ...]'
     )
-    response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
     raw = _extract_json(response)
     items = raw if isinstance(raw, list) else raw.get("components", [])
     parsed = IdentifyResponse.model_validate({"components": items})
     return [c.model_dump() for c in parsed.components]
 
 
-async def read_directives(image_bytes: bytes) -> list[str]:
+async def read_directives(
+    image_bytes: bytes,
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> list[str]:
     """Step 3: Read SPICE directives from the image."""
     system = _load_prompt("directives_system.txt")
     user = (
@@ -65,14 +79,21 @@ async def read_directives(image_bytes: bytes) -> list[str]:
         'Output as a JSON array of strings:\n'
         '[".param RINP=1k PSV=15", ".tran 0.005"]'
     )
-    response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
     raw = _extract_json(response)
     items = raw if isinstance(raw, list) else raw.get("directives", [])
     parsed = DirectivesResponse.model_validate({"directives": items})
     return parsed.directives
 
 
-async def describe_layout(image_bytes: bytes, components: list[dict]) -> list[dict]:
+async def describe_layout(
+    image_bytes: bytes,
+    components: list[dict],
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> list[dict]:
     """Step 4: Describe spatial layout."""
     system = _load_prompt("layout_system.txt")
     comp_list = ", ".join(f"{c['instanceName']} ({c['type']})" for c in components)
@@ -84,14 +105,22 @@ async def describe_layout(image_bytes: bytes, components: list[dict]) -> list[di
         'Output as JSON array:\n'
         '[{"instanceName": "U1", "region": "center", "nearby": [{"name": "R5", "direction": "above"}]}, ...]'
     )
-    response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
     raw = _extract_json(response)
     items = raw if isinstance(raw, list) else raw.get("layout", [])
     parsed = LayoutResponse.model_validate({"layout": items})
     return [item.model_dump() for item in parsed.layout]
 
 
-async def describe_wires(image_bytes: bytes, components: list[dict], pin_info: dict) -> dict:
+async def describe_wires(
+    image_bytes: bytes,
+    components: list[dict],
+    pin_info: dict,
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
     """Step 5: Describe wire connections."""
     system = _load_prompt("wires_system.txt")
     comp_lines = []
@@ -111,7 +140,8 @@ async def describe_wires(image_bytes: bytes, components: list[dict], pin_info: d
         '"grounds": [{"component": "V3", "pin": "-"}], '
         '"labels": [{"component": "U1", "pin": "OUT", "label": "OUT"}]}'
     )
-    response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
     raw = _extract_json(response)
     if not isinstance(raw, dict):
         raw = {"connections": [], "grounds": [], "labels": []}
