@@ -10,16 +10,9 @@ import {
 interface GenerateWizardProps {
   imageFile: File;
   dictionary: Dictionary | null;
-  onAddComponent: (
-    type: string,
-    name: string,
-    value: string,
-    pos: { x: number; y: number },
-    value2?: string
-  ) => void;
-  onAddWire: (from: { x: number; y: number }, to: { x: number; y: number }) => void;
-  onAddFlag: (name: string, pos: { x: number; y: number }) => void;
-  onAddText: (content: string, pos: { x: number; y: number }) => void;
+  onAddComponentsBatch: (comps: { type: string; instanceName: string; value: string; pos: { x: number; y: number }; value2?: string }[]) => void;
+  onAddWiresBatch: (wires: { from: { x: number; y: number }; to: { x: number; y: number } }[]) => void;
+  onAddFlagsBatch: (flags: { name: string; pos: { x: number; y: number } }[]) => void;
   onClose: () => void;
   llmProvider: LlmProvider;
 }
@@ -45,10 +38,9 @@ const VALUE_HINTS: Record<string, string> = {
 export function GenerateWizard({
   imageFile,
   dictionary,
-  onAddComponent,
-  onAddWire,
-  onAddFlag,
-  onAddText,
+  onAddComponentsBatch,
+  onAddWiresBatch,
+  onAddFlagsBatch,
   onClose,
   llmProvider,
 }: GenerateWizardProps) {
@@ -133,16 +125,16 @@ export function GenerateWizard({
       const result = await wizardLayout(imageFile, confirmed, llmProvider);
       setPositions(result.positions);
 
-      // Place confirmed components in the editor
-      confirmed.forEach((comp) => {
-        const pos = result.positions[comp.instanceName] ?? { x: 400, y: 300 };
-        onAddComponent(comp.type, comp.instanceName, comp.value, pos, comp.value2);
-      });
-
-      // Add directives as text
-      directives.forEach((d, i) => {
-        onAddText(d, { x: 50, y: 50 + i * 32 });
-      });
+      // Place all confirmed components in one batch
+      onAddComponentsBatch(
+        confirmed.map((comp) => ({
+          type: comp.type,
+          instanceName: comp.instanceName,
+          value: comp.value,
+          pos: result.positions[comp.instanceName] ?? { x: 400, y: 300 },
+          value2: comp.value2,
+        }))
+      );
 
       setStep(4);
     } catch (e: unknown) {
@@ -150,7 +142,7 @@ export function GenerateWizard({
     } finally {
       setLoading(false);
     }
-  }, [imageFile, components, directives, onAddComponent, onAddText, llmProvider]);
+  }, [imageFile, components, onAddComponentsBatch, llmProvider]);
 
   const goStep4to5 = useCallback(async () => {
     setLoading(true);
@@ -159,12 +151,12 @@ export function GenerateWizard({
       const confirmed = components.filter((c) => c.confirmed !== false);
       const result = await wizardWires(imageFile, confirmed, positions, llmProvider);
 
-      result.wires.forEach((w) => {
-        onAddWire({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
-      });
-      result.flags.forEach((f) => {
-        onAddFlag(f.name, { x: f.x, y: f.y });
-      });
+      onAddWiresBatch(
+        result.wires.map((w) => ({ from: { x: w.x1, y: w.y1 }, to: { x: w.x2, y: w.y2 } }))
+      );
+      onAddFlagsBatch(
+        result.flags.map((f) => ({ name: f.name, pos: { x: f.x, y: f.y } }))
+      );
 
       setWireCount(result.wires.length);
       setFlagCount(result.flags.length);
@@ -177,7 +169,7 @@ export function GenerateWizard({
     } finally {
       setLoading(false);
     }
-  }, [imageFile, components, positions, onAddWire, onAddFlag, llmProvider]);
+  }, [imageFile, components, positions, onAddWiresBatch, onAddFlagsBatch, llmProvider]);
 
   // ── Component row helpers ───────────────────────────────────────────────────
 

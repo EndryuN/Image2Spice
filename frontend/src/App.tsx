@@ -32,10 +32,13 @@ function App() {
     moveComponent,
     updateComponent,
     addComponent,
+    addComponentsBatch,
     deleteComponent,
     addWire,
+    addWiresBatch,
     deleteWire,
     addFlag,
+    addFlagsBatch,
     deleteFlag,
     undo,
     redo,
@@ -190,19 +193,9 @@ function App() {
           imageFile={imageFile}
           dictionary={dictionary}
           llmProvider={llmProvider}
-          onAddComponent={(type, name, value, pos, value2) => {
-            addComponent(type, name, value, pos);
-            if (value2) {
-              // value2 is stored on the component; update after add
-              // (addComponent doesn't currently accept value2, but component supports it)
-              setStatus(`Placed ${name} (${type})`);
-            }
-          }}
-          onAddWire={addWire}
-          onAddFlag={addFlag}
-          onAddText={(content, _pos) => {
-            setStatus(`Added directive: ${content}`);
-          }}
+          onAddComponentsBatch={addComponentsBatch}
+          onAddWiresBatch={addWiresBatch}
+          onAddFlagsBatch={addFlagsBatch}
           onClose={() => {
             setWizardOpen(false);
             setStatus("Wizard closed.");
