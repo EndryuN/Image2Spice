@@ -12,7 +12,10 @@ export async function wizardIdentify(file: File): Promise<{ components: WizardCo
   const formData = new FormData();
   formData.append("file", file);
   const resp = await fetch(`${BASE_URL}/wizard/identify`, { method: "POST", body: formData });
-  if (!resp.ok) throw new Error(`Identify failed: ${resp.status}`);
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Identify failed: ${resp.status}`);
+  }
   return resp.json();
 }
 
@@ -20,7 +23,10 @@ export async function wizardDirectives(file: File): Promise<{ directives: string
   const formData = new FormData();
   formData.append("file", file);
   const resp = await fetch(`${BASE_URL}/wizard/directives`, { method: "POST", body: formData });
-  if (!resp.ok) throw new Error(`Directives failed: ${resp.status}`);
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Directives failed: ${resp.status}`);
+  }
   return resp.json();
 }
 
@@ -32,7 +38,10 @@ export async function wizardLayout(
   formData.append("file", file);
   formData.append("components_json", JSON.stringify(components));
   const resp = await fetch(`${BASE_URL}/wizard/layout`, { method: "POST", body: formData });
-  if (!resp.ok) throw new Error(`Layout failed: ${resp.status}`);
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Layout failed: ${resp.status}`);
+  }
   return resp.json();
 }
 
@@ -46,7 +55,10 @@ export async function wizardWires(
   formData.append("components_json", JSON.stringify(components));
   formData.append("positions_json", JSON.stringify(positions));
   const resp = await fetch(`${BASE_URL}/wizard/wires`, { method: "POST", body: formData });
-  if (!resp.ok) throw new Error(`Wires failed: ${resp.status}`);
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Wires failed: ${resp.status}`);
+  }
   return resp.json();
 }
 

@@ -367,9 +367,33 @@ export function GenerateWizard({
                 border: "1px solid var(--color-error, #c62828)",
                 borderRadius: 4,
                 fontSize: 13,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
               }}
             >
-              {error}
+              <span style={{ flex: 1 }}>{error}</span>
+              <button
+                onClick={() => {
+                  setError(null);
+                  if (step === 1) goStep1to2();
+                  else if (step === 2) goStep2to3();
+                  else if (step === 3) goStep3to4();
+                  else if (step === 4) goStep4to5();
+                }}
+                style={{
+                  padding: "2px 10px",
+                  border: "1px solid var(--color-error, #c62828)",
+                  borderRadius: 4,
+                  background: "transparent",
+                  color: "var(--color-error, #c62828)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Retry
+              </button>
             </div>
           )}
 
@@ -698,7 +722,7 @@ export function GenerateWizard({
                 disabled={loading}
                 style={primaryBtnStyle}
               >
-                {loading ? "Loading..." : step === 4 ? "Trace Wires" : "Next →"}
+                {loading ? "AI is analyzing..." : step === 4 ? "Trace Wires" : "Next →"}
               </button>
             </>
           )}
