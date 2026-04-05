@@ -2,6 +2,17 @@ import type { Dictionary, WizardComponent, WizardWireResult, LlmProvider } from 
 
 const BASE_URL = "http://localhost:8000/api";
 
+export async function checkLlmHealth(provider: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`${BASE_URL}/health/llm?provider=${provider}`);
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return data.online === true;
+  } catch {
+    return false;
+  }
+}
+
 export async function fetchDictionary(): Promise<Dictionary> {
   const resp = await fetch(`${BASE_URL}/dictionary`);
   if (!resp.ok) throw new Error(`Dictionary fetch failed: ${resp.status}`);

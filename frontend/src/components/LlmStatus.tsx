@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { LlmProvider } from "../types/schematic";
+import { checkLlmHealth } from "../lib/api";
 
 interface LlmStatusProps {
   provider: LlmProvider;
@@ -8,7 +9,20 @@ interface LlmStatusProps {
 
 export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
   const [open, setOpen] = useState(false);
+  const [online, setOnline] = useState<boolean | null>(null);
   const ref = useRef<HTMLDivElement>(null);
+
+  const checkHealth = useCallback(() => {
+    setOnline(null);
+    checkLlmHealth(provider.provider).then(setOnline);
+  }, [provider.provider]);
+
+  // Check health on mount and when provider changes
+  useEffect(() => {
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000);
+    return () => clearInterval(interval);
+  }, [checkHealth]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -25,6 +39,9 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
       ? `Local: ${provider.model}`
       : `OpenRouter: ${provider.model.split("/").pop()}`;
 
+  const dotColor =
+    online === null ? "var(--color-text-muted, #888)" : online ? "#4caf50" : "#f44336";
+
   return (
     <div ref={ref} style={{ position: "relative" }}>
       <button
@@ -38,8 +55,21 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
           cursor: "pointer",
           fontSize: 11,
           whiteSpace: "nowrap",
+          display: "flex",
+          alignItems: "center",
+          gap: 6,
         }}
       >
+        <span
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: "50%",
+            background: dotColor,
+            display: "inline-block",
+            flexShrink: 0,
+          }}
+        />
         {label} ▾
       </button>
 
@@ -63,6 +93,26 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
             fontSize: 12,
           }}
         >
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <span style={{ fontSize: 11, color: "var(--color-text-muted)" }}>
+              Status: {online === null ? "checking..." : online ? "connected" : "offline"}
+            </span>
+            <button
+              onClick={checkHealth}
+              style={{
+                padding: "2px 8px",
+                border: "1px solid var(--color-border)",
+                borderRadius: 4,
+                background: "var(--bg-canvas)",
+                color: "var(--color-text)",
+                cursor: "pointer",
+                fontSize: 11,
+              }}
+            >
+              Refresh
+            </button>
+          </div>
+
           <div>
             <div style={{ marginBottom: 4, fontWeight: "bold", color: "var(--color-text)" }}>Provider</div>
             <label style={{ marginRight: 16, cursor: "pointer", color: "var(--color-text)" }}>

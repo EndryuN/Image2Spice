@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -10,6 +11,27 @@ from services.validator import validate_asc
 router = APIRouter(prefix="/api")
 
 DICTIONARY_DIR = Path(__file__).parent.parent.parent / "dictionary"
+
+
+@router.get("/health/llm")
+async def llm_health(provider: str = "local"):
+    """Check if the LLM provider is reachable."""
+    if provider == "local":
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get("http://localhost:11434/api/tags")
+                resp.raise_for_status()
+                return {"online": True}
+        except Exception:
+            return {"online": False}
+    elif provider == "openrouter":
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                resp = await client.get("https://openrouter.ai/api/v1/models", params={"limit": 1})
+                return {"online": resp.status_code == 200}
+        except Exception:
+            return {"online": False}
+    return {"online": False}
 
 
 @router.get("/dictionary")
