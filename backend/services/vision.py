@@ -1,8 +1,17 @@
 import json
+import logging
 import re
 from pathlib import Path
 
 from services.ollama_client import chat_with_vision
+from services.schemas import (
+    IdentifyResponse,
+    DirectivesResponse,
+    LayoutResponse,
+    WiresResponse,
+)
+
+logger = logging.getLogger(__name__)
 
 VISION_MODEL = "qwen3-vl:8b"
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
@@ -42,10 +51,10 @@ async def identify_components(image_bytes: bytes) -> list[dict]:
         'Output as JSON array:\n[{"type": "res", "instanceName": "R1", "value": "1k"}, ...]'
     )
     response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
-    result = _extract_json(response)
-    if isinstance(result, list):
-        return result
-    return result.get("components", [])
+    raw = _extract_json(response)
+    items = raw if isinstance(raw, list) else raw.get("components", [])
+    parsed = IdentifyResponse.model_validate({"components": items})
+    return [c.model_dump() for c in parsed.components]
 
 
 async def read_directives(image_bytes: bytes) -> list[str]:
@@ -57,10 +66,10 @@ async def read_directives(image_bytes: bytes) -> list[str]:
         '[".param RINP=1k PSV=15", ".tran 0.005"]'
     )
     response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
-    result = _extract_json(response)
-    if isinstance(result, list):
-        return result
-    return result.get("directives", [])
+    raw = _extract_json(response)
+    items = raw if isinstance(raw, list) else raw.get("directives", [])
+    parsed = DirectivesResponse.model_validate({"directives": items})
+    return parsed.directives
 
 
 async def describe_layout(image_bytes: bytes, components: list[dict]) -> list[dict]:
@@ -76,10 +85,10 @@ async def describe_layout(image_bytes: bytes, components: list[dict]) -> list[di
         '[{"instanceName": "U1", "region": "center", "nearby": [{"name": "R5", "direction": "above"}]}, ...]'
     )
     response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
-    result = _extract_json(response)
-    if isinstance(result, list):
-        return result
-    return result.get("layout", [])
+    raw = _extract_json(response)
+    items = raw if isinstance(raw, list) else raw.get("layout", [])
+    parsed = LayoutResponse.model_validate({"layout": items})
+    return [item.model_dump() for item in parsed.layout]
 
 
 async def describe_wires(image_bytes: bytes, components: list[dict], pin_info: dict) -> dict:
@@ -103,7 +112,8 @@ async def describe_wires(image_bytes: bytes, components: list[dict], pin_info: d
         '"labels": [{"component": "U1", "pin": "OUT", "label": "OUT"}]}'
     )
     response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
-    result = _extract_json(response)
-    if isinstance(result, dict):
-        return result
-    return {"connections": [], "grounds": [], "labels": []}
+    raw = _extract_json(response)
+    if not isinstance(raw, dict):
+        raw = {"connections": [], "grounds": [], "labels": []}
+    parsed = WiresResponse.model_validate(raw)
+    return parsed.model_dump(by_alias=True)
