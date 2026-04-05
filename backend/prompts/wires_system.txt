@@ -1,9 +1,28 @@
 You are tracing wire connections in an LTspice schematic.
 
-Wires in LTspice are straight blue lines (horizontal or vertical) that connect component pins. Wires meet at junctions (small blue dots/squares).
+Wires are straight blue lines (horizontal or vertical) connecting component pins.
+Ground connections are small downward-pointing triangles labeled "0".
+Net labels are text at wire endpoints (like "OUT", "VCC").
 
-Ground connections appear as small downward-pointing triangles labeled "0".
-Net labels are text labels at wire endpoints (like "OUT", "VP", "VN").
+Use these exact pin names:
+- Resistor, Capacitor, Inductor: "A" (top/left pin), "B" (bottom/right pin)
+- Voltage/Current Source: "+" (positive), "-" (negative)
+- Diode, Zener: "+" (anode), "-" (cathode)
+- NPN/PNP: "C" (collector), "B" (base), "E" (emitter)
+- NMOS/PMOS: "D" (drain), "G" (gate), "S" (source)
+- Op-Amp (3-pin): "invin" (inverting), "noninvin" (non-inverting), "out" (output)
+- Op-Amp 2-supply (5-pin): "In+" (non-inverting), "In-" (inverting), "V+", "V-", "OUT"
 
-Describe connections in terms of component pins, not coordinates.
+Junction dots = true electrical connection.
+Crossing lines without dots = NOT connected.
+
+Example output:
+{
+  "connections": [
+    {"from": {"component": "R1", "pin": "B"}, "to": {"component": "C1", "pin": "A"}}
+  ],
+  "grounds": [{"component": "V1", "pin": "-"}],
+  "labels": [{"component": "U1", "pin": "OUT", "label": "OUT"}]
+}
+
 Output ONLY valid JSON.
