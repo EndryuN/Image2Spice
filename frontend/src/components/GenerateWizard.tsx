@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import type { Dictionary, WizardComponent } from "../types/schematic";
 import {
   wizardIdentify,
@@ -55,6 +55,23 @@ export function GenerateWizard({
   // Summary
   const [wireCount, setWireCount] = useState(0);
   const [flagCount, setFlagCount] = useState(0);
+
+  // Elapsed timer for loading states
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (loading) {
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [loading]);
 
   const componentTypes = dictionary ? Object.keys(dictionary.components) : [];
 
@@ -722,9 +739,20 @@ export function GenerateWizard({
                 disabled={loading}
                 style={primaryBtnStyle}
               >
-                {loading ? "AI is analyzing..." : step === 4 ? "Trace Wires" : "Next →"}
+                {loading ? `AI is analyzing... (${elapsed}s)` : step === 4 ? "Trace Wires" : "Next →"}
               </button>
             </>
+          )}
+          {loading && (
+            <span style={{ fontSize: 11, color: "var(--color-text-muted)", alignSelf: "center" }}>
+              {elapsed < 10
+                ? "Sending image to model..."
+                : elapsed < 30
+                ? "Model is processing..."
+                : elapsed < 120
+                ? "Still working — VLM calls can take 1-2 min on first run"
+                : "Taking longer than usual — check Ollama is running"}
+            </span>
           )}
         </div>
       </div>
