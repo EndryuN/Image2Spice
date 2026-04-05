@@ -4,7 +4,7 @@ const BASE_URL = "http://localhost:8000/api";
 
 export async function checkLlmHealth(provider: string): Promise<boolean> {
   try {
-    const resp = await fetch(`${BASE_URL}/health/llm?provider=${provider}`);
+    const resp = await fetch(`${BASE_URL}/llm-status?provider=${provider}`);
     if (!resp.ok) return false;
     const data = await resp.json();
     return data.online === true;

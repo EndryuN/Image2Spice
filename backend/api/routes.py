@@ -13,8 +13,8 @@ router = APIRouter(prefix="/api")
 DICTIONARY_DIR = Path(__file__).parent.parent.parent / "dictionary"
 
 
-@router.get("/health/llm")
-async def llm_health(provider: str = "local"):
+@router.get("/llm-status")
+async def llm_status(provider: str = "local"):
     """Check if the LLM provider is reachable."""
     if provider == "local":
         try:
@@ -26,8 +26,9 @@ async def llm_health(provider: str = "local"):
             return {"online": False}
     elif provider == "openrouter":
         try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get("https://openrouter.ai/api/v1/models", params={"limit": 1})
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get("https://openrouter.ai/api/v1/models",
+                                        params={"limit": "1"})
                 return {"online": resp.status_code == 200}
         except Exception:
             return {"online": False}
