@@ -27,23 +27,41 @@ def _require_image(file: UploadFile) -> None:
         raise HTTPException(400, "File must be an image")
 
 
+def _parse_provider(provider_json: str) -> tuple[str, str | None, str | None]:
+    """Parse provider_json form field into (provider, api_key, model)."""
+    config = json.loads(provider_json) if provider_json else {}
+    return (
+        config.get("provider", "local"),
+        config.get("apiKey"),
+        config.get("model"),
+    )
+
+
 @router.post("/identify")
-async def wizard_identify(file: UploadFile = File(...)):
+async def wizard_identify(
+    file: UploadFile = File(...),
+    provider_json: str = Form("{}"),
+):
     _require_image(file)
     image_bytes = await file.read()
+    provider, api_key, model = _parse_provider(provider_json)
     try:
-        components = await identify_components(image_bytes)
+        components = await identify_components(image_bytes, provider=provider, api_key=api_key, model=model)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(400, detail={"error": "Component identification failed", "details": str(exc)})
     return {"components": components}
 
 
 @router.post("/directives")
-async def wizard_directives(file: UploadFile = File(...)):
+async def wizard_directives(
+    file: UploadFile = File(...),
+    provider_json: str = Form("{}"),
+):
     _require_image(file)
     image_bytes = await file.read()
+    provider, api_key, model = _parse_provider(provider_json)
     try:
-        directives = await read_directives(image_bytes)
+        directives = await read_directives(image_bytes, provider=provider, api_key=api_key, model=model)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(400, detail={"error": "Directive reading failed", "details": str(exc)})
     return {"directives": directives}
@@ -53,13 +71,15 @@ async def wizard_directives(file: UploadFile = File(...)):
 async def wizard_layout(
     file: UploadFile = File(...),
     components_json: str = Form(""),
+    provider_json: str = Form("{}"),
 ):
     _require_image(file)
     image_bytes = await file.read()
     components = json.loads(components_json) if components_json else []
+    provider, api_key, model = _parse_provider(provider_json)
 
     try:
-        layout_desc = await describe_layout(image_bytes, components)
+        layout_desc = await describe_layout(image_bytes, components, provider=provider, api_key=api_key, model=model)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(400, detail={"error": "Layout description failed", "details": str(exc)})
 
@@ -82,11 +102,13 @@ async def wizard_wires(
     file: UploadFile = File(...),
     components_json: str = Form(""),
     positions_json: str = Form(""),
+    provider_json: str = Form("{}"),
 ):
     _require_image(file)
     image_bytes = await file.read()
     components = json.loads(components_json) if components_json else []
     positions = json.loads(positions_json) if positions_json else {}
+    provider, api_key, model = _parse_provider(provider_json)
 
     dictionary = _load_dictionary()
     pin_defs = {}
@@ -98,7 +120,7 @@ async def wizard_wires(
             component_bounds[comp_id] = bounds
 
     try:
-        wire_desc = await describe_wires(image_bytes, components, pin_defs)
+        wire_desc = await describe_wires(image_bytes, components, pin_defs, provider=provider, api_key=api_key, model=model)
     except (ValidationError, ValueError) as exc:
         raise HTTPException(400, detail={"error": "Wire tracing failed", "details": str(exc)})
 
