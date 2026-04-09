@@ -2,12 +2,12 @@
 echo Starting image2asc...
 echo.
 
-:: Check if Ollama is running
+:: Check if Ollama is running (optional — OpenRouter can be used instead)
 curl -s http://localhost:11434/api/tags >nul 2>&1
 if errorlevel 1 (
-    echo [!] Ollama is not running. Please start Ollama first.
-    pause
-    exit /b 1
+    echo [*] Ollama is not running. You can use OpenRouter instead.
+    echo     To use local models, start Ollama first: ollama serve
+    echo.
 )
 
 :: Kill any existing processes on ports 8000 and 5173
