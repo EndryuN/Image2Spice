@@ -1,4 +1,4 @@
-# image2asc
+# image2spice
 
 Convert LTspice circuit schematic screenshots into `.asc` files using a vision model and a multi-step wizard pipeline. Supports local inference via Ollama or cloud inference via [OpenRouter](https://openrouter.ai/).
 
@@ -105,7 +105,7 @@ Starts backend + frontend and opens the browser automatically.
 ## Project Structure
 
 ```
-image2asc/
+image2spice/
   backend/
     main.py                   # FastAPI app, CORS for localhost:5173
     api/

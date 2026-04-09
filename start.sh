@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "Starting image2asc..."
+echo "Starting image2spice..."
 echo
 
 # Check if Ollama is running (optional — OpenRouter can be used instead)
@@ -43,7 +43,7 @@ FRONTEND_PID=$!
 sleep 2
 
 echo
-echo "image2asc is running!"
+echo "image2spice is running!"
 echo "  Backend:  http://localhost:8000"
 echo "  Frontend: http://localhost:5173"
 echo

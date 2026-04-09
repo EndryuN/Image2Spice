@@ -143,7 +143,7 @@ async def _call_openrouter(
     headers = {
         "Authorization": f"Bearer {api_key}",
         "HTTP-Referer": "http://localhost:5173",
-        "X-Title": "image2asc",
+        "X-Title": "image2spice",
         "Content-Type": "application/json",
     }
     async with httpx.AsyncClient(timeout=120.0) as client:

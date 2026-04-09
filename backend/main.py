@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
 from api.wizard_routes import router as wizard_router
 
-app = FastAPI(title="image2asc")
+app = FastAPI(title="image2spice")
 
 app.add_middleware(
     CORSMiddleware,

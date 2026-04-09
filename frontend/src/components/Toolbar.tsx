@@ -50,7 +50,7 @@ export function Toolbar({
         background: "var(--bg-panel)",
       }}
     >
-      <strong>image2asc</strong>
+      <strong>image2spice</strong>
       <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
       <input
         ref={fileRef}
