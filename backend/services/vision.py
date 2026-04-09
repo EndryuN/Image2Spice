@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 VISION_MODELS = {
     "local": "qwen3-vl:8b",
-    "openrouter": "qwen/qwen3.6-plus:free",
+    "openrouter": "google/gemma-4-26b-a4b-it:free",
 }
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 

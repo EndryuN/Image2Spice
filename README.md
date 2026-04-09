@@ -42,7 +42,7 @@ ollama pull qwen3-vl:8b    # Vision model (~6 GB)
 
 Get a free API key from [openrouter.ai](https://openrouter.ai/). No local GPU required.
 
-The recommended model is **`qwen/qwen3.6-plus:free`** (selected by default). If rate-limited, the app automatically falls back to `google/gemma-3-27b-it:free` and `google/gemma-3-12b-it:free`.
+The recommended model is **`google/gemma-4-26b-a4b-it:free`** (selected by default). If rate-limited, the app automatically falls back to `google/gemma-4-31b-it:free` and `nvidia/nemotron-nano-12b-v2-vl:free`.
 
 `.asc` generation is fully deterministic - no text-only LLM is needed for either provider.
 

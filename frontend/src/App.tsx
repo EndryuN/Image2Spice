@@ -29,6 +29,7 @@ function App() {
 
   const {
     schematic,
+    setSheet,
     moveComponent,
     updateComponent,
     addComponent,
@@ -171,7 +172,7 @@ function App() {
             />
           </div>
           <AscPreview ascText={ascText} validation={validation} />
-          <ScreenshotPanel imageUrl={imageUrl} />
+          <ScreenshotPanel imageUrl={imageUrl} onUpload={handleUpload} />
         </div>
       </div>
 
@@ -193,6 +194,7 @@ function App() {
           imageFile={imageFile}
           dictionary={dictionary}
           llmProvider={llmProvider}
+          onSetSheet={setSheet}
           onAddComponentsBatch={addComponentsBatch}
           onAddWiresBatch={addWiresBatch}
           onAddFlagsBatch={addFlagsBatch}

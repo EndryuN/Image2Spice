@@ -28,7 +28,7 @@ export function Editor({
   showGrid,
 }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 880, h: 680 });
+  const [viewBox, setViewBox] = useState({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
   const [dragging, setDragging] = useState<{
     id: string;
     offsetX: number;
@@ -134,21 +134,22 @@ export function Editor({
     setPanning(null);
   }, []);
 
-  const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
-      e.preventDefault();
-      const scale = e.deltaY > 0 ? 1.1 : 0.9;
-      const pos = svgPoint(e.clientX, e.clientY);
+  const zoomBy = useCallback(
+    (factor: number) => {
       setViewBox((v) => {
-        const newW = v.w * scale;
-        const newH = v.h * scale;
-        const newX = pos.x - (pos.x - v.x) * scale;
-        const newY = pos.y - (pos.y - v.y) * scale;
-        return { x: newX, y: newY, w: newW, h: newH };
+        const cx = v.x + v.w / 2;
+        const cy = v.y + v.h / 2;
+        const newW = v.w * factor;
+        const newH = v.h * factor;
+        return { x: cx - newW / 2, y: cy - newH / 2, w: newW, h: newH };
       });
     },
-    [svgPoint]
+    []
   );
+
+  const zoomFit = useCallback(() => {
+    setViewBox({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
+  }, [schematic.sheet.width, schematic.sheet.height]);
 
   const startDrag = useCallback(
     (compId: string, e: React.MouseEvent) => {
@@ -166,6 +167,11 @@ export function Editor({
     },
     [mode, schematic.components, svgPoint, onSelect]
   );
+
+  // Reset viewBox when sheet size changes
+  useEffect(() => {
+    setViewBox({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
+  }, [schematic.sheet.width, schematic.sheet.height]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -222,71 +228,112 @@ export function Editor({
     );
   };
 
+  const zoomPercent = Math.round((schematic.sheet.width / viewBox.w) * 100);
+
   return (
-    <svg
-      ref={svgRef}
-      viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
-      style={{ flex: 2, background: "var(--bg-editor)", cursor: mode === "wire" ? "crosshair" : "default" }}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
-      onWheel={handleWheel}
-    >
-      <defs>
-        <pattern id="grid" width={16} height={16} patternUnits="userSpaceOnUse">
-          <circle cx={0} cy={0} r={0.5} fill="var(--color-grid)" />
-        </pattern>
-      </defs>
-      {showGrid && (
-        <rect x={viewBox.x} y={viewBox.y} width={viewBox.w} height={viewBox.h} fill="url(#grid)" />
-      )}
-      {schematic.wires.map((wire) => (
-        <line
-          key={wire.id}
-          x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
-          stroke="var(--color-component)" strokeWidth={2}
-          onClick={(e) => { e.stopPropagation(); onSelect(wire.id); }}
-          style={{ cursor: "pointer" }}
-        />
-      ))}
-      {wireStart && wirePreview && (
-        <line
-          x1={wireStart.x} y1={wireStart.y} x2={wirePreview.x} y2={wirePreview.y}
-          stroke="var(--color-selection)" strokeWidth={1} strokeDasharray="4,4" pointerEvents="none"
-        />
-      )}
-      {schematic.components.map(renderComponent)}
-      {schematic.flags.map((flag) => (
-        <g key={flag.id} transform={`translate(${flag.position.x}, ${flag.position.y})`}>
-          {flag.name === "0" ? (
-            <>
-              <line x1={0} y1={0} x2={0} y2={10} stroke="var(--color-component)" strokeWidth={2} />
-              <line x1={-10} y1={10} x2={10} y2={10} stroke="var(--color-component)" strokeWidth={2} />
-              <line x1={-6} y1={14} x2={6} y2={14} stroke="var(--color-component)" strokeWidth={2} />
-              <line x1={-2} y1={18} x2={2} y2={18} stroke="var(--color-component)" strokeWidth={2} />
-            </>
-          ) : (
-            <>
-              <line x1={0} y1={0} x2={0} y2={-5} stroke="var(--color-component)" strokeWidth={1} />
-              <text x={2} y={-8} fontSize={11} fill="var(--color-component)">{flag.name}</text>
-            </>
-          )}
-        </g>
-      ))}
-      {schematic.text.map((t) => (
-        <text key={t.id} x={t.position.x} y={t.position.y} fontSize={11} fill="var(--color-text)">
-          {t.content}
-        </text>
-      ))}
-      <text
-        x={viewBox.x + 10}
-        y={viewBox.y + viewBox.h - 10}
-        fontSize={14 * (viewBox.w / 880)}
-        fill="var(--color-text-muted)"
-        pointerEvents="none"
+    <div style={{ flex: 2, position: "relative", overflow: "hidden" }}>
+      <svg
+        ref={svgRef}
+        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+        style={{ width: "100%", height: "100%", background: "var(--bg-editor-outside)", cursor: mode === "wire" ? "crosshair" : "default" }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
       >
-        {Math.round((880 / viewBox.w) * 100)}%
-      </text>
-    </svg>
+        <defs>
+          <pattern id="grid" width={16} height={16} patternUnits="userSpaceOnUse">
+            <circle cx={0} cy={0} r={0.5} fill="var(--color-grid)" />
+          </pattern>
+        </defs>
+        {/* Sheet area */}
+        <rect
+          x={0} y={0}
+          width={schematic.sheet.width} height={schematic.sheet.height}
+          fill="var(--bg-editor)"
+          stroke="var(--color-border)"
+          strokeWidth={2}
+        />
+        {showGrid && (
+          <rect
+            x={0} y={0}
+            width={schematic.sheet.width} height={schematic.sheet.height}
+            fill="url(#grid)"
+          />
+        )}
+        {schematic.wires.map((wire) => (
+          <line
+            key={wire.id}
+            x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
+            stroke="var(--color-component)" strokeWidth={2}
+            onClick={(e) => { e.stopPropagation(); onSelect(wire.id); }}
+            style={{ cursor: "pointer" }}
+          />
+        ))}
+        {wireStart && wirePreview && (
+          <line
+            x1={wireStart.x} y1={wireStart.y} x2={wirePreview.x} y2={wirePreview.y}
+            stroke="var(--color-selection)" strokeWidth={1} strokeDasharray="4,4" pointerEvents="none"
+          />
+        )}
+        {schematic.components.map(renderComponent)}
+        {schematic.flags.map((flag) => (
+          <g key={flag.id} transform={`translate(${flag.position.x}, ${flag.position.y})`}>
+            {flag.name === "0" ? (
+              <>
+                <line x1={0} y1={0} x2={0} y2={10} stroke="var(--color-component)" strokeWidth={2} />
+                <line x1={-10} y1={10} x2={10} y2={10} stroke="var(--color-component)" strokeWidth={2} />
+                <line x1={-6} y1={14} x2={6} y2={14} stroke="var(--color-component)" strokeWidth={2} />
+                <line x1={-2} y1={18} x2={2} y2={18} stroke="var(--color-component)" strokeWidth={2} />
+              </>
+            ) : (
+              <>
+                <line x1={0} y1={0} x2={0} y2={-5} stroke="var(--color-component)" strokeWidth={1} />
+                <text x={2} y={-8} fontSize={11} fill="var(--color-component)">{flag.name}</text>
+              </>
+            )}
+          </g>
+        ))}
+        {schematic.text.map((t) => (
+          <text key={t.id} x={t.position.x} y={t.position.y} fontSize={11} fill="var(--color-text)">
+            {t.content}
+          </text>
+        ))}
+      </svg>
+
+      {/* Zoom controls overlay */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: 8,
+          left: 8,
+          display: "flex",
+          alignItems: "center",
+          gap: 4,
+          background: "var(--bg-panel)",
+          border: "1px solid var(--color-border)",
+          borderRadius: 6,
+          padding: "2px 4px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+        }}
+      >
+        <button onClick={() => zoomBy(1.25)} style={zoomBtnStyle} title="Zoom out">-</button>
+        <button onClick={zoomFit} style={{ ...zoomBtnStyle, minWidth: 44, fontSize: 11 }} title="Fit to sheet">
+          {zoomPercent}%
+        </button>
+        <button onClick={() => zoomBy(0.8)} style={zoomBtnStyle} title="Zoom in">+</button>
+      </div>
+    </div>
   );
 }
+
+const zoomBtnStyle: React.CSSProperties = {
+  padding: "2px 8px",
+  border: "1px solid var(--color-border)",
+  borderRadius: 4,
+  background: "var(--bg-canvas, var(--bg-panel))",
+  color: "var(--color-text)",
+  cursor: "pointer",
+  fontSize: 14,
+  fontWeight: "bold",
+  lineHeight: 1,
+};

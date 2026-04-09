@@ -1,6 +1,7 @@
 :root,
 :root[data-theme="light"] {
-  --bg-editor: #e8e8e8;
+  --bg-editor: #ffffff;
+  --bg-editor-outside: #d0d0d0;
   --bg-panel: #f5f5f5;
   --bg-input: #ffffff;
   --bg-modal: #ffffff;
@@ -20,7 +21,8 @@
 }
 
 :root[data-theme="dark"] {
-  --bg-editor: #1e1e1e;
+  --bg-editor: #2a2a2a;
+  --bg-editor-outside: #151515;
   --bg-panel: #2d2d2d;
   --bg-input: #3a3a3a;
   --bg-modal: #2d2d2d;

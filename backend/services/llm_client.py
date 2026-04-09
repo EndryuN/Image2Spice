@@ -8,14 +8,21 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+
+class OpenRouterError(Exception):
+    """Error from OpenRouter API with status code."""
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        super().__init__(f"OpenRouter error ({status_code}): {message}")
+
 OLLAMA_BASE_URL = "http://localhost:11434"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Free vision models to try in order if the primary is rate-limited
 OPENROUTER_FALLBACKS = [
-    "qwen/qwen3.6-plus:free",
-    "google/gemma-3-27b-it:free",
-    "google/gemma-3-12b-it:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "nvidia/nemotron-nano-12b-v2-vl:free",
+    "meta-llama/llama-3.2-11b-vision-instruct:free",
 ]
 
 _MAX_RETRIES = 3
@@ -82,10 +89,9 @@ async def _call_openrouter_with_retry(
         for attempt in range(_MAX_RETRIES):
             try:
                 return await _call_openrouter(try_model, system_prompt, user_prompt, image_bytes, api_key)
-            except ValueError as exc:
+            except OpenRouterError as exc:
                 last_error = exc
-                error_str = str(exc)
-                if "429" in error_str:
+                if exc.status_code == 429:
                     if attempt < _MAX_RETRIES - 1:
                         delay = _RETRY_DELAYS[attempt]
                         logger.warning("Rate limited on %s, retrying in %ds (attempt %d/%d)",
@@ -95,10 +101,14 @@ async def _call_openrouter_with_retry(
                         logger.warning("Rate limited on %s after %d retries, trying next model",
                                        try_model, _MAX_RETRIES)
                         break  # try next model
+                elif exc.status_code in (400, 401, 403, 404, 502, 503):
+                    logger.warning("Provider error %d on %s, trying next model",
+                                   exc.status_code, try_model)
+                    break  # try next model immediately
                 else:
-                    raise  # non-429 error, don't retry
+                    raise  # other errors, don't retry
 
-    raise ValueError(f"All models rate-limited. Last error: {last_error}")
+    raise ValueError(f"All models failed. Last error: {last_error}")
 
 
 async def _call_openrouter(
@@ -143,7 +153,7 @@ async def _call_openrouter(
         )
         if resp.status_code != 200:
             logger.error("OpenRouter error %d on %s: %s", resp.status_code, model, resp.text[:500])
-            raise ValueError(f"OpenRouter error ({resp.status_code}): {resp.text[:500]}")
+            raise OpenRouterError(resp.status_code, resp.text[:500])
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
         logger.info("OpenRouter [%s] response (%d chars): %s...", model, len(content), content[:100])

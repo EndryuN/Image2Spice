@@ -10,6 +10,7 @@ import {
 interface GenerateWizardProps {
   imageFile: File;
   dictionary: Dictionary | null;
+  onSetSheet: (width: number, height: number) => void;
   onAddComponentsBatch: (comps: { type: string; instanceName: string; value: string; pos: { x: number; y: number }; value2?: string }[]) => void;
   onAddWiresBatch: (wires: { from: { x: number; y: number }; to: { x: number; y: number } }[]) => void;
   onAddFlagsBatch: (flags: { name: string; pos: { x: number; y: number } }[]) => void;
@@ -38,6 +39,7 @@ const VALUE_HINTS: Record<string, string> = {
 export function GenerateWizard({
   imageFile,
   dictionary,
+  onSetSheet,
   onAddComponentsBatch,
   onAddWiresBatch,
   onAddFlagsBatch,
@@ -85,11 +87,23 @@ export function GenerateWizard({
 
   const componentTypes = dictionary ? Object.keys(dictionary.components) : [];
 
+  // Auto-detect canvas size from image
+  useEffect(() => {
+    const img = new Image();
+    img.onload = () => {
+      setCanvasWidth(img.naturalWidth);
+      setCanvasHeight(img.naturalHeight);
+    };
+    img.src = URL.createObjectURL(imageFile);
+    return () => URL.revokeObjectURL(img.src);
+  }, [imageFile]);
+
   // ── Step transitions ────────────────────────────────────────────────────────
 
   const goStep1to2 = useCallback(async () => {
     setLoading(true);
     setError(null);
+    onSetSheet(canvasWidth, canvasHeight);
     try {
       const result = await wizardIdentify(imageFile, llmProvider);
       setComponents(
@@ -101,7 +115,7 @@ export function GenerateWizard({
     } finally {
       setLoading(false);
     }
-  }, [imageFile, llmProvider]);
+  }, [imageFile, llmProvider, canvasWidth, canvasHeight, onSetSheet]);
 
   const goStep2to3 = useCallback(async () => {
     setLoading(true);
@@ -117,32 +131,64 @@ export function GenerateWizard({
     }
   }, [imageFile, llmProvider]);
 
+  const fallbackGrid = useCallback(
+    (comps: WizardComponent[]): Record<string, { x: number; y: number }> => {
+      const cols = Math.max(1, Math.ceil(Math.sqrt(comps.length)));
+      const spacing = 128;
+      const startX = 160;
+      const startY = 160;
+      const pos: Record<string, { x: number; y: number }> = {};
+      comps.forEach((c, i) => {
+        pos[c.instanceName] = {
+          x: startX + (i % cols) * spacing,
+          y: startY + Math.floor(i / cols) * spacing,
+        };
+      });
+      return pos;
+    },
+    [],
+  );
+
   const goStep3to4 = useCallback(async () => {
     setLoading(true);
     setError(null);
+    const confirmed = components.filter((c) => c.confirmed !== false);
+
+    let resultPositions: Record<string, { x: number; y: number }> = {};
     try {
-      const confirmed = components.filter((c) => c.confirmed !== false);
       const result = await wizardLayout(imageFile, confirmed, llmProvider);
-      setPositions(result.positions);
-
-      // Place all confirmed components in one batch
-      onAddComponentsBatch(
-        confirmed.map((comp) => ({
-          type: comp.type,
-          instanceName: comp.instanceName,
-          value: comp.value,
-          pos: result.positions[comp.instanceName] ?? { x: 400, y: 300 },
-          value2: comp.value2,
-        }))
-      );
-
-      setStep(4);
+      resultPositions = result.positions;
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
+      // VLM layout failed — use grid fallback, don't block the pipeline
+      setError(`Layout AI failed, using auto-layout. ${e instanceof Error ? e.message : String(e)}`);
+      resultPositions = fallbackGrid(confirmed);
     }
-  }, [imageFile, components, onAddComponentsBatch, llmProvider]);
+
+    // Fill in any components the VLM missed with fallback positions
+    const missing = confirmed.filter((c) => !resultPositions[c.instanceName]);
+    if (missing.length > 0) {
+      const grid = fallbackGrid(missing);
+      for (const [name, pos] of Object.entries(grid)) {
+        resultPositions[name] = pos;
+      }
+    }
+
+    setPositions(resultPositions);
+
+    // Place all confirmed components in one batch
+    onAddComponentsBatch(
+      confirmed.map((comp) => ({
+        type: comp.type,
+        instanceName: comp.instanceName,
+        value: comp.value,
+        pos: resultPositions[comp.instanceName] ?? { x: 400, y: 300 },
+        value2: comp.value2,
+      }))
+    );
+
+    setStep(4);
+    setLoading(false);
+  }, [imageFile, components, onAddComponentsBatch, llmProvider, fallbackGrid]);
 
   const goStep4to5 = useCallback(async () => {
     setLoading(true);
@@ -573,21 +619,38 @@ export function GenerateWizard({
                   </tbody>
                 </table>
               </div>
-              <button
-                onClick={addMissingComp}
-                style={{
-                  marginTop: 8,
-                  padding: "4px 12px",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 4,
-                  background: "var(--bg-canvas)",
-                  color: "var(--color-text)",
-                  cursor: "pointer",
-                  fontSize: 12,
-                }}
-              >
-                + Add Missing
-              </button>
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button
+                  onClick={addMissingComp}
+                  style={{
+                    padding: "4px 12px",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 4,
+                    background: "var(--bg-canvas)",
+                    color: "var(--color-text)",
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                >
+                  + Add Missing
+                </button>
+                <button
+                  onClick={() =>
+                    setComponents((prev) => prev.map((c) => ({ ...c, confirmed: true })))
+                  }
+                  style={{
+                    padding: "4px 12px",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 4,
+                    background: "var(--color-success, #4caf50)",
+                    color: "#fff",
+                    cursor: "pointer",
+                    fontSize: 12,
+                  }}
+                >
+                  Confirm All
+                </button>
+              </div>
             </div>
           )}
 

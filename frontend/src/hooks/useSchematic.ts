@@ -61,6 +61,13 @@ export function useSchematic() {
     [set]
   );
 
+  const setSheet = useCallback(
+    (width: number, height: number) => {
+      set({ ...schematic, sheet: { width, height } });
+    },
+    [schematic, set]
+  );
+
   const moveComponent = useCallback(
     (id: string, pos: Position) => {
       const snapped = { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
@@ -221,6 +228,7 @@ export function useSchematic() {
 
   return {
     schematic,
+    setSheet,
     loadFromGenerateResponse,
     moveComponent,
     updateComponent,
