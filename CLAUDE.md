@@ -1,4 +1,4 @@
-# CLAUDE.md — image2spice
+# CLAUDE.md — image2asc
 
 Convert LTspice circuit schematic screenshots into `.asc` files using a local vision model (qwen3-vl:8b via Ollama) and a multi-step wizard pipeline.
 
@@ -30,7 +30,7 @@ Image -> Wizard (4 steps via Ollama) -> SchematicIR -> deterministic asc_generat
 ## Directory Structure
 
 ```
-image2spice/
+image2asc/
   backend/
     main.py                   # FastAPI app, CORS for localhost:5173
     api/

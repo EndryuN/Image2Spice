@@ -1,19 +1,14 @@
 import json
-import logging
 from pathlib import Path
 
-import httpx
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
-from pydantic import ValidationError
+from pydantic import BaseModel
 
 from services.vision import identify_components, read_directives, describe_layout, describe_wires
-from services.llm_client import OpenRouterError
 from services.layout import compute_layout
 from services.wire_router import compute_wires
-from services.schemas import normalize_pin
 
 router = APIRouter(prefix="/api/wizard")
-logger = logging.getLogger(__name__)
 
 DICTIONARY_DIR = Path(__file__).parent.parent.parent / "dictionary"
 
@@ -24,52 +19,21 @@ def _load_dictionary() -> dict:
     )
 
 
-def _require_image(file: UploadFile) -> None:
+@router.post("/identify")
+async def wizard_identify(file: UploadFile = File(...)):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(400, "File must be an image")
-
-
-def _parse_provider(provider_json: str) -> tuple[str, str | None, str | None]:
-    """Parse provider_json form field into (provider, api_key, model)."""
-    config = json.loads(provider_json) if provider_json else {}
-    return (
-        config.get("provider", "local"),
-        config.get("apiKey"),
-        config.get("model"),
-    )
-
-
-@router.post("/identify")
-async def wizard_identify(
-    file: UploadFile = File(...),
-    provider_json: str = Form("{}"),
-):
-    _require_image(file)
     image_bytes = await file.read()
-    provider, api_key, model = _parse_provider(provider_json)
-    try:
-        components = await identify_components(image_bytes, provider=provider, api_key=api_key, model=model)
-    except (httpx.HTTPError, httpx.TransportError) as exc:
-        raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
-    except (ValidationError, ValueError, OpenRouterError) as exc:
-        raise HTTPException(400, detail={"error": "Component identification failed", "details": str(exc)})
+    components = await identify_components(image_bytes)
     return {"components": components}
 
 
 @router.post("/directives")
-async def wizard_directives(
-    file: UploadFile = File(...),
-    provider_json: str = Form("{}"),
-):
-    _require_image(file)
+async def wizard_directives(file: UploadFile = File(...)):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "File must be an image")
     image_bytes = await file.read()
-    provider, api_key, model = _parse_provider(provider_json)
-    try:
-        directives = await read_directives(image_bytes, provider=provider, api_key=api_key, model=model)
-    except (httpx.HTTPError, httpx.TransportError) as exc:
-        raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
-    except (ValidationError, ValueError, OpenRouterError) as exc:
-        raise HTTPException(400, detail={"error": "Directive reading failed", "details": str(exc)})
+    directives = await read_directives(image_bytes)
     return {"directives": directives}
 
 
@@ -77,35 +41,23 @@ async def wizard_directives(
 async def wizard_layout(
     file: UploadFile = File(...),
     components_json: str = Form(""),
-    provider_json: str = Form("{}"),
-    sheet_json: str = Form("{}"),
 ):
-    _require_image(file)
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "File must be an image")
     image_bytes = await file.read()
     components = json.loads(components_json) if components_json else []
-    sheet = json.loads(sheet_json) if sheet_json else {}
-    sheet_width = sheet.get("width", 880)
-    sheet_height = sheet.get("height", 680)
-    provider, api_key, model = _parse_provider(provider_json)
 
-    try:
-        layout_desc = await describe_layout(image_bytes, components, provider=provider, api_key=api_key, model=model)
-    except (httpx.HTTPError, httpx.TransportError) as exc:
-        raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
-    except (ValidationError, ValueError, OpenRouterError) as exc:
-        raise HTTPException(400, detail={"error": "Layout description failed", "details": str(exc)})
+    layout_desc = await describe_layout(image_bytes, components)
 
     dictionary = _load_dictionary()
     comp_sizes = {}
     for comp_id, comp_data in dictionary["components"].items():
-        bounds = comp_data.get("geometry", {}).get("bounds")
         comp_sizes[comp_id] = {
             "width": comp_data["symbol"]["width"],
             "height": comp_data["symbol"]["height"],
-            "bounds": bounds,
         }
 
-    positions = compute_layout(layout_desc, comp_sizes, sheet_width=sheet_width, sheet_height=sheet_height)
+    positions = compute_layout(layout_desc, comp_sizes)
     return {"layout": layout_desc, "positions": positions}
 
 
@@ -114,49 +66,19 @@ async def wizard_wires(
     file: UploadFile = File(...),
     components_json: str = Form(""),
     positions_json: str = Form(""),
-    provider_json: str = Form("{}"),
 ):
-    _require_image(file)
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "File must be an image")
     image_bytes = await file.read()
     components = json.loads(components_json) if components_json else []
     positions = json.loads(positions_json) if positions_json else {}
-    provider, api_key, model = _parse_provider(provider_json)
 
     dictionary = _load_dictionary()
     pin_defs = {}
-    component_bounds = {}
     for comp_id, comp_data in dictionary["components"].items():
         pin_defs[comp_id] = comp_data.get("pins", [])
-        bounds = comp_data.get("geometry", {}).get("bounds")
-        if bounds:
-            component_bounds[comp_id] = bounds
 
-    try:
-        wire_desc = await describe_wires(image_bytes, components, pin_defs, provider=provider, api_key=api_key, model=model)
-    except (httpx.HTTPError, httpx.TransportError) as exc:
-        raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
-    except (ValidationError, ValueError, OpenRouterError) as exc:
-        raise HTTPException(400, detail={"error": "Wire tracing failed", "details": str(exc)})
-
-    # Normalize pin names in wire descriptions
-    for conn in wire_desc.get("connections", []):
-        for key in ("from", "to"):
-            ep = conn.get(key)
-            if ep:
-                comp_name = ep["component"]
-                comp_entry = next((c for c in components if c["instanceName"] == comp_name), None)
-                if comp_entry:
-                    ep["pin"] = normalize_pin(comp_entry["type"], ep["pin"])
-
-    for gnd in wire_desc.get("grounds", []):
-        comp_entry = next((c for c in components if c["instanceName"] == gnd["component"]), None)
-        if comp_entry:
-            gnd["pin"] = normalize_pin(comp_entry["type"], gnd["pin"])
-
-    for lbl in wire_desc.get("labels", []):
-        comp_entry = next((c for c in components if c["instanceName"] == lbl["component"]), None)
-        if comp_entry:
-            lbl["pin"] = normalize_pin(comp_entry["type"], lbl["pin"])
+    wire_desc = await describe_wires(image_bytes, components, pin_defs)
 
     comp_map = {}
     for comp in components:
@@ -168,7 +90,7 @@ async def wizard_wires(
                 "type": comp["type"],
             }
 
-    wire_result = compute_wires(comp_map, pin_defs, wire_desc, component_bounds)
+    wire_result = compute_wires(comp_map, pin_defs, wire_desc)
 
     return {
         "wire_descriptions": wire_desc,

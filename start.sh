@@ -3,14 +3,13 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-echo "Starting image2spice..."
+echo "Starting image2asc..."
 echo
 
-# Check if Ollama is running (optional — OpenRouter can be used instead)
-if ! curl -s --max-time 3 http://localhost:11434/api/tags >/dev/null 2>&1; then
-    echo "[*] Ollama is not running. You can use OpenRouter instead."
-    echo "    To use local models, start Ollama first: ollama serve"
-    echo
+# Check if Ollama is running
+if ! curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+    echo "[!] Ollama is not running. Please start Ollama first."
+    exit 1
 fi
 
 # Kill any existing processes on ports 8000 and 5173
@@ -43,7 +42,7 @@ FRONTEND_PID=$!
 sleep 2
 
 echo
-echo "image2spice is running!"
+echo "image2asc is running!"
 echo "  Backend:  http://localhost:8000"
 echo "  Frontend: http://localhost:5173"
 echo

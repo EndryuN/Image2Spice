@@ -61,13 +61,6 @@ export function useSchematic() {
     [set]
   );
 
-  const setSheet = useCallback(
-    (width: number, height: number) => {
-      set({ ...schematic, sheet: { width, height } });
-    },
-    [schematic, set]
-  );
-
   const moveComponent = useCallback(
     (id: string, pos: Position) => {
       const snapped = { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
@@ -105,46 +98,6 @@ export function useSchematic() {
         rotation: "R0",
       };
       set({ ...schematic, components: [...schematic.components, comp] });
-    },
-    [schematic, set]
-  );
-
-  const addComponentsBatch = useCallback(
-    (comps: { type: string; instanceName: string; value: string; pos: Position; value2?: string }[]) => {
-      const newComps = comps.map((c) => ({
-        id: genId(),
-        type: c.type,
-        instanceName: c.instanceName,
-        value: c.value,
-        position: { x: snapToGrid(c.pos.x), y: snapToGrid(c.pos.y) },
-        rotation: "R0",
-        value2: c.value2,
-      }));
-      set({ ...schematic, components: [...schematic.components, ...newComps] });
-    },
-    [schematic, set]
-  );
-
-  const addWiresBatch = useCallback(
-    (wires: { from: Position; to: Position }[]) => {
-      const newWires = wires.map((w) => ({
-        id: genId(),
-        from: { x: snapToGrid(w.from.x), y: snapToGrid(w.from.y) },
-        to: { x: snapToGrid(w.to.x), y: snapToGrid(w.to.y) },
-      }));
-      set({ ...schematic, wires: [...schematic.wires, ...newWires] });
-    },
-    [schematic, set]
-  );
-
-  const addFlagsBatch = useCallback(
-    (flags: { name: string; pos: Position }[]) => {
-      const newFlags = flags.map((f) => ({
-        id: genId(),
-        name: f.name,
-        position: { x: snapToGrid(f.pos.x), y: snapToGrid(f.pos.y) },
-      }));
-      set({ ...schematic, flags: [...schematic.flags, ...newFlags] });
     },
     [schematic, set]
   );
@@ -228,18 +181,14 @@ export function useSchematic() {
 
   return {
     schematic,
-    setSheet,
     loadFromGenerateResponse,
     moveComponent,
     updateComponent,
     addComponent,
-    addComponentsBatch,
     deleteComponent,
     addWire,
-    addWiresBatch,
     deleteWire,
     addFlag,
-    addFlagsBatch,
     deleteFlag,
     toIR,
     undo,

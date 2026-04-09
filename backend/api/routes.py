@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -11,66 +10,6 @@ from services.validator import validate_asc
 router = APIRouter(prefix="/api")
 
 DICTIONARY_DIR = Path(__file__).parent.parent.parent / "dictionary"
-
-
-@router.get("/llm-status")
-async def llm_status(provider: str = "local", api_key: str = ""):
-    """Check if the LLM provider is reachable and authenticated."""
-    if provider == "local":
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get("http://localhost:11434/api/tags")
-                resp.raise_for_status()
-                return {"online": True}
-        except Exception:
-            return {"online": False}
-    elif provider == "openrouter":
-        if not api_key:
-            return {"online": False, "error": "No API key provided"}
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    "https://openrouter.ai/api/v1/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    params={"limit": "1"},
-                )
-                if resp.status_code == 200:
-                    return {"online": True}
-                return {"online": False, "error": f"API returned {resp.status_code}"}
-        except Exception as exc:
-            return {"online": False, "error": str(exc)}
-    elif provider == "openai":
-        if not api_key:
-            return {"online": False, "error": "No API key provided"}
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    "https://api.openai.com/v1/models",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                )
-                if resp.status_code == 200:
-                    return {"online": True}
-                return {"online": False, "error": f"API returned {resp.status_code}"}
-        except Exception as exc:
-            return {"online": False, "error": str(exc)}
-    elif provider == "claude":
-        if not api_key:
-            return {"online": False, "error": "No API key provided"}
-        try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    "https://api.anthropic.com/v1/models",
-                    headers={
-                        "x-api-key": api_key,
-                        "anthropic-version": "2023-06-01",
-                    },
-                )
-                if resp.status_code == 200:
-                    return {"online": True}
-                return {"online": False, "error": f"API returned {resp.status_code}"}
-        except Exception as exc:
-            return {"online": False, "error": str(exc)}
-    return {"online": False}
 
 
 @router.get("/dictionary")

@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import type { Dictionary, WizardComponent, LlmProvider } from "../types/schematic";
+import { useState, useCallback } from "react";
+import type { Dictionary, WizardComponent } from "../types/schematic";
 import {
   wizardIdentify,
   wizardDirectives,
@@ -10,54 +10,34 @@ import {
 interface GenerateWizardProps {
   imageFile: File;
   dictionary: Dictionary | null;
-  onSetSheet: (width: number, height: number) => void;
-  onAddComponentsBatch: (comps: { type: string; instanceName: string; value: string; pos: { x: number; y: number }; value2?: string }[]) => void;
-  onAddWiresBatch: (wires: { from: { x: number; y: number }; to: { x: number; y: number } }[]) => void;
-  onAddFlagsBatch: (flags: { name: string; pos: { x: number; y: number } }[]) => void;
+  onAddComponent: (
+    type: string,
+    name: string,
+    value: string,
+    pos: { x: number; y: number },
+    value2?: string
+  ) => void;
+  onAddWire: (from: { x: number; y: number }, to: { x: number; y: number }) => void;
+  onAddFlag: (name: string, pos: { x: number; y: number }) => void;
+  onAddText: (content: string, pos: { x: number; y: number }) => void;
   onClose: () => void;
-  llmProvider: LlmProvider;
 }
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6; // 6 = done
 
-const VALUE_HINTS: Record<string, string> = {
-  res: "e.g. 10k, 1M, 100, {param}",
-  cap: "e.g. 100n, 1u, 10p",
-  ind: "e.g. 10u, 1m, 100n",
-  voltage: "e.g. 5, AC 1, PULSE(...), {param}",
-  current: "e.g. 1m, AC 0.01",
-  diode: "e.g. 1N4148, D",
-  zener: "e.g. 1N4733, D",
-  npn: "e.g. 2N2222, BC547",
-  pnp: "e.g. 2N3906, BC557",
-  nmos: "e.g. 2N7000, IRF540",
-  pmos: "e.g. IRF9540",
-  opamp: "e.g. LM358, UniversalOpamp2",
-  opamp2: "e.g. LM358, ADA4627",
-};
-
 export function GenerateWizard({
   imageFile,
   dictionary,
-  onSetSheet,
-  onAddComponentsBatch,
-  onAddWiresBatch,
-  onAddFlagsBatch,
+  onAddComponent,
+  onAddWire,
+  onAddFlag,
+  onAddText,
   onClose,
-  llmProvider,
 }: GenerateWizardProps) {
   const [step, setStep] = useState<Step>(1);
   const [minimized, setMinimized] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  // Abort in-flight requests on unmount or close
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
 
   // Step 1: canvas
   const [canvasWidth, setCanvasWidth] = useState(880);
@@ -76,156 +56,80 @@ export function GenerateWizard({
   const [wireCount, setWireCount] = useState(0);
   const [flagCount, setFlagCount] = useState(0);
 
-  // Elapsed timer for loading states
-  const [elapsed, setElapsed] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    if (loading) {
-      setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [loading]);
-
   const componentTypes = dictionary ? Object.keys(dictionary.components) : [];
-
-  // Auto-detect canvas size from image
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      setCanvasWidth(img.naturalWidth);
-      setCanvasHeight(img.naturalHeight);
-    };
-    img.src = URL.createObjectURL(imageFile);
-    return () => URL.revokeObjectURL(img.src);
-  }, [imageFile]);
 
   // ── Step transitions ────────────────────────────────────────────────────────
 
   const goStep1to2 = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
     setLoading(true);
     setError(null);
-    onSetSheet(canvasWidth, canvasHeight);
     try {
-      const result = await wizardIdentify(imageFile, llmProvider, ac.signal);
+      const result = await wizardIdentify(imageFile);
       setComponents(
         result.components.map((c) => ({ ...c, confirmed: false }))
       );
       setStep(2);
     } catch (e: unknown) {
-      if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [imageFile, llmProvider, canvasWidth, canvasHeight, onSetSheet]);
+  }, [imageFile]);
 
   const goStep2to3 = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
     setLoading(true);
     setError(null);
     try {
-      const result = await wizardDirectives(imageFile, llmProvider, ac.signal);
+      const result = await wizardDirectives(imageFile);
       setDirectives(result.directives);
       setStep(3);
     } catch (e: unknown) {
-      if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [imageFile, llmProvider]);
-
-  const fallbackGrid = useCallback(
-    (comps: WizardComponent[]): Record<string, { x: number; y: number }> => {
-      const cols = Math.max(1, Math.ceil(Math.sqrt(comps.length)));
-      const spacing = 128;
-      const startX = 160;
-      const startY = 160;
-      const pos: Record<string, { x: number; y: number }> = {};
-      comps.forEach((c, i) => {
-        pos[c.instanceName] = {
-          x: startX + (i % cols) * spacing,
-          y: startY + Math.floor(i / cols) * spacing,
-        };
-      });
-      return pos;
-    },
-    [],
-  );
+  }, [imageFile]);
 
   const goStep3to4 = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
-    const confirmed = components.filter((c) => c.confirmed !== false);
-
-    let resultPositions: Record<string, { x: number; y: number }> = {};
-    try {
-      const result = await wizardLayout(imageFile, confirmed, llmProvider, { width: canvasWidth, height: canvasHeight }, ac.signal);
-      resultPositions = result.positions;
-    } catch (e: unknown) {
-      if ((e as Error).name === "AbortError") { setLoading(false); return; }
-      // VLM layout failed — use grid fallback, don't block the pipeline
-      setError(`Layout AI failed, using auto-layout. ${e instanceof Error ? e.message : String(e)}`);
-      resultPositions = fallbackGrid(confirmed);
-    }
-
-    // Fill in any components the VLM missed with fallback positions
-    const missing = confirmed.filter((c) => !resultPositions[c.instanceName]);
-    if (missing.length > 0) {
-      const grid = fallbackGrid(missing);
-      for (const [name, pos] of Object.entries(grid)) {
-        resultPositions[name] = pos;
-      }
-    }
-
-    setPositions(resultPositions);
-
-    // Place all confirmed components in one batch
-    onAddComponentsBatch(
-      confirmed.map((comp) => ({
-        type: comp.type,
-        instanceName: comp.instanceName,
-        value: comp.value,
-        pos: resultPositions[comp.instanceName] ?? { x: 400, y: 300 },
-        value2: comp.value2,
-      }))
-    );
-
-    setStep(4);
-    setLoading(false);
-  }, [imageFile, components, onAddComponentsBatch, llmProvider, fallbackGrid]);
-
-  const goStep4to5 = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
     setLoading(true);
     setError(null);
     try {
       const confirmed = components.filter((c) => c.confirmed !== false);
-      const result = await wizardWires(imageFile, confirmed, positions, llmProvider, ac.signal);
+      const result = await wizardLayout(imageFile, confirmed);
+      setPositions(result.positions);
 
-      onAddWiresBatch(
-        result.wires.map((w) => ({ from: { x: w.x1, y: w.y1 }, to: { x: w.x2, y: w.y2 } }))
-      );
-      onAddFlagsBatch(
-        result.flags.map((f) => ({ name: f.name, pos: { x: f.x, y: f.y } }))
-      );
+      // Place confirmed components in the editor
+      confirmed.forEach((comp) => {
+        const pos = result.positions[comp.instanceName] ?? { x: 400, y: 300 };
+        onAddComponent(comp.type, comp.instanceName, comp.value, pos, comp.value2);
+      });
+
+      // Add directives as text
+      directives.forEach((d, i) => {
+        onAddText(d, { x: 50, y: 50 + i * 32 });
+      });
+
+      setStep(4);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [imageFile, components, directives, onAddComponent, onAddText]);
+
+  const goStep4to5 = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const confirmed = components.filter((c) => c.confirmed !== false);
+      const result = await wizardWires(imageFile, confirmed, positions);
+
+      result.wires.forEach((w) => {
+        onAddWire({ x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 });
+      });
+      result.flags.forEach((f) => {
+        onAddFlag(f.name, { x: f.x, y: f.y });
+      });
 
       setWireCount(result.wires.length);
       setFlagCount(result.flags.length);
@@ -234,12 +138,11 @@ export function GenerateWizard({
       // Immediately mark as done
       setStep(6);
     } catch (e: unknown) {
-      if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
     }
-  }, [imageFile, components, positions, onAddWiresBatch, onAddFlagsBatch, llmProvider]);
+  }, [imageFile, components, positions, onAddWire, onAddFlag]);
 
   // ── Component row helpers ───────────────────────────────────────────────────
 
@@ -464,33 +367,9 @@ export function GenerateWizard({
                 border: "1px solid var(--color-error, #c62828)",
                 borderRadius: 4,
                 fontSize: 13,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
               }}
             >
-              <span style={{ flex: 1 }}>{error}</span>
-              <button
-                onClick={() => {
-                  setError(null);
-                  if (step === 1) goStep1to2();
-                  else if (step === 2) goStep2to3();
-                  else if (step === 3) goStep3to4();
-                  else if (step === 4) goStep4to5();
-                }}
-                style={{
-                  padding: "2px 10px",
-                  border: "1px solid var(--color-error, #c62828)",
-                  borderRadius: 4,
-                  background: "transparent",
-                  color: "var(--color-error, #c62828)",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Retry
-              </button>
+              {error}
             </div>
           )}
 
@@ -565,9 +444,9 @@ export function GenerateWizard({
                       <tr
                         key={idx}
                         style={{
-                          borderLeft: comp.confirmed
-                            ? "3px solid #4caf50"
-                            : "3px solid transparent",
+                          background: comp.confirmed
+                            ? "var(--color-success-bg, #e8f5e9)"
+                            : "transparent",
                         }}
                       >
                         <td style={tdStyle}>
@@ -601,7 +480,6 @@ export function GenerateWizard({
                         <td style={tdStyle}>
                           <input
                             value={comp.value}
-                            placeholder={VALUE_HINTS[comp.type] ?? ""}
                             onChange={(e) => updateComp(idx, { value: e.target.value })}
                             style={inputStyle}
                           />
@@ -643,38 +521,21 @@ export function GenerateWizard({
                   </tbody>
                 </table>
               </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <button
-                  onClick={addMissingComp}
-                  style={{
-                    padding: "4px 12px",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 4,
-                    background: "var(--bg-canvas)",
-                    color: "var(--color-text)",
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
-                >
-                  + Add Missing
-                </button>
-                <button
-                  onClick={() =>
-                    setComponents((prev) => prev.map((c) => ({ ...c, confirmed: true })))
-                  }
-                  style={{
-                    padding: "4px 12px",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 4,
-                    background: "var(--color-success, #4caf50)",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
-                >
-                  Confirm All
-                </button>
-              </div>
+              <button
+                onClick={addMissingComp}
+                style={{
+                  marginTop: 8,
+                  padding: "4px 12px",
+                  border: "1px solid var(--color-border)",
+                  borderRadius: 4,
+                  background: "var(--bg-canvas)",
+                  color: "var(--color-text)",
+                  cursor: "pointer",
+                  fontSize: 12,
+                }}
+              >
+                + Add Missing
+              </button>
             </div>
           )}
 
@@ -837,20 +698,9 @@ export function GenerateWizard({
                 disabled={loading}
                 style={primaryBtnStyle}
               >
-                {loading ? `AI is analyzing... (${elapsed}s)` : step === 4 ? "Trace Wires" : "Next →"}
+                {loading ? "Loading..." : step === 4 ? "Trace Wires" : "Next →"}
               </button>
             </>
-          )}
-          {loading && (
-            <span style={{ fontSize: 11, color: "var(--color-text-muted)", alignSelf: "center" }}>
-              {elapsed < 10
-                ? "Sending image to model..."
-                : elapsed < 30
-                ? "Model is processing..."
-                : elapsed < 120
-                ? "Still working — VLM calls can take 1-2 min on first run"
-                : "Taking longer than usual — check Ollama is running"}
-            </span>
           )}
         </div>
       </div>

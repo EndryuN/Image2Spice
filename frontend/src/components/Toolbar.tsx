@@ -1,6 +1,4 @@
 import { useRef } from "react";
-import { LlmStatus } from "./LlmStatus";
-import type { LlmProvider } from "../types/schematic";
 
 interface ToolbarProps {
   onUpload: (file: File) => void;
@@ -16,8 +14,6 @@ interface ToolbarProps {
   onToggleGrid: () => void;
   theme: "light" | "dark";
   onToggleTheme: () => void;
-  llmProvider: LlmProvider;
-  onProviderChange: (provider: LlmProvider) => void;
 }
 
 export function Toolbar({
@@ -34,8 +30,6 @@ export function Toolbar({
   onToggleGrid,
   theme,
   onToggleTheme,
-  llmProvider,
-  onProviderChange,
 }: ToolbarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -50,7 +44,7 @@ export function Toolbar({
         background: "var(--bg-panel)",
       }}
     >
-      <strong>image2spice</strong>
+      <strong>image2asc</strong>
       <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
       <input
         ref={fileRef}
@@ -77,8 +71,6 @@ export function Toolbar({
       <button onClick={onToggleTheme} title="Toggle Theme">
         {theme === "light" ? "Dark" : "Light"}
       </button>
-      <div style={{ flex: 1 }} />
-      <LlmStatus provider={llmProvider} onProviderChange={onProviderChange} />
     </div>
   );
 }
