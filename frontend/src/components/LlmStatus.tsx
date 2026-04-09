@@ -13,8 +13,8 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   const checkHealth = useCallback(() => {
-    // For openrouter, don't auto-check — require explicit Connect
-    if (provider.provider === "openrouter") return;
+    // For non-local providers, don't auto-check — require explicit Connect
+    if (provider.provider !== "local") return;
     setOnline(null);
     checkLlmHealth(provider.provider).then(setOnline);
   }, [provider.provider]);
@@ -45,18 +45,23 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
     return () => document.removeEventListener("mousedown", handler);
   }, [open]);
 
-  const label =
-    provider.provider === "local"
-      ? `Local: ${provider.model}`
-      : `OpenRouter: ${provider.model.split("/").pop()}`;
+  const providerLabels: Record<string, string> = {
+    local: "Local",
+    openrouter: "OpenRouter",
+    openai: "OpenAI",
+    claude: "Claude",
+  };
+  const shortModel = provider.model.includes("/") ? provider.model.split("/").pop() : provider.model;
+  const label = `${providerLabels[provider.provider] ?? provider.provider}: ${shortModel}`;
 
   const dotColor =
     online === null ? "var(--color-text-muted, #888)" : online ? "#4caf50" : "#f44336";
 
+  const needsKey = provider.provider !== "local";
   const statusText =
-    provider.provider === "openrouter" && online === null && !provider.apiKey
+    needsKey && online === null && !provider.apiKey
       ? "Enter API key"
-      : provider.provider === "openrouter" && online === null
+      : needsKey && online === null
       ? "Click Connect"
       : online === null
       ? "checking..."
@@ -72,8 +77,8 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
           padding: "4px 10px",
           border: "1px solid var(--color-border)",
           borderRadius: 12,
-          background: provider.provider === "openrouter" ? "var(--color-accent, #1976d2)" : "var(--bg-canvas)",
-          color: provider.provider === "openrouter" ? "#fff" : "var(--color-text)",
+          background: provider.provider !== "local" ? "var(--color-accent, #1976d2)" : "var(--bg-canvas)",
+          color: provider.provider !== "local" ? "#fff" : "var(--color-text)",
           cursor: "pointer",
           fontSize: 11,
           whiteSpace: "nowrap",
@@ -139,32 +144,64 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
 
           <div>
             <div style={{ marginBottom: 4, fontWeight: "bold", color: "var(--color-text)" }}>Provider</div>
-            <label style={{ marginRight: 16, cursor: "pointer", color: "var(--color-text)" }}>
-              <input
-                type="radio"
-                name="provider"
-                checked={provider.provider === "local"}
-                onChange={() =>
-                  onProviderChange({ provider: "local", model: "qwen3-vl:8b" })
-                }
-              />{" "}
-              Local (Ollama)
-            </label>
-            <label style={{ cursor: "pointer", color: "var(--color-text)" }}>
-              <input
-                type="radio"
-                name="provider"
-                checked={provider.provider === "openrouter"}
-                onChange={() =>
-                  onProviderChange({
-                    provider: "openrouter",
-                    model: "google/gemma-4-31b-it:free",
-                    apiKey: provider.apiKey ?? "",
-                  })
-                }
-              />{" "}
-              OpenRouter
-            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px" }}>
+              <label style={{ cursor: "pointer", color: "var(--color-text)" }}>
+                <input
+                  type="radio"
+                  name="provider"
+                  checked={provider.provider === "local"}
+                  onChange={() =>
+                    onProviderChange({ provider: "local", model: "qwen3-vl:8b" })
+                  }
+                />{" "}
+                Local (Ollama)
+              </label>
+              <label style={{ cursor: "pointer", color: "var(--color-text)" }}>
+                <input
+                  type="radio"
+                  name="provider"
+                  checked={provider.provider === "openrouter"}
+                  onChange={() =>
+                    onProviderChange({
+                      provider: "openrouter",
+                      model: "google/gemma-4-31b-it:free",
+                      apiKey: provider.apiKey ?? "",
+                    })
+                  }
+                />{" "}
+                OpenRouter
+              </label>
+              <label style={{ cursor: "pointer", color: "var(--color-text)" }}>
+                <input
+                  type="radio"
+                  name="provider"
+                  checked={provider.provider === "openai"}
+                  onChange={() =>
+                    onProviderChange({
+                      provider: "openai",
+                      model: "gpt-4o",
+                      apiKey: provider.apiKey ?? "",
+                    })
+                  }
+                />{" "}
+                OpenAI
+              </label>
+              <label style={{ cursor: "pointer", color: "var(--color-text)" }}>
+                <input
+                  type="radio"
+                  name="provider"
+                  checked={provider.provider === "claude"}
+                  onChange={() =>
+                    onProviderChange({
+                      provider: "claude",
+                      model: "claude-sonnet-4-20250514",
+                      apiKey: provider.apiKey ?? "",
+                    })
+                  }
+                />{" "}
+                Claude
+              </label>
+            </div>
           </div>
 
           <div>
@@ -187,7 +224,7 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
             />
           </div>
 
-          {provider.provider === "openrouter" && (
+          {provider.provider !== "local" && (
             <>
               <div>
                 <div style={{ marginBottom: 4, fontWeight: "bold", color: "var(--color-text)" }}>API Key</div>
@@ -198,7 +235,11 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
                     setOnline(null);
                     onProviderChange({ ...provider, apiKey: e.target.value });
                   }}
-                  placeholder="sk-or-..."
+                  placeholder={
+                    provider.provider === "openrouter" ? "sk-or-..." :
+                    provider.provider === "openai" ? "sk-..." :
+                    provider.provider === "claude" ? "sk-ant-..." : "API key"
+                  }
                   style={{
                     width: "100%",
                     padding: "4px 8px",

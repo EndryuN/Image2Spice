@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 VISION_MODELS = {
     "local": "qwen3-vl:8b",
     "openrouter": "google/gemma-4-31b-it:free",
+    "openai": "gpt-4o",
+    "claude": "claude-sonnet-4-20250514",
 }
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 

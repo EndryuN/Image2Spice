@@ -113,7 +113,7 @@ export interface WizardWireResult {
 }
 
 export interface LlmProvider {
-  provider: "local" | "openrouter";
+  provider: "local" | "openrouter" | "openai" | "claude";
   model: string;
   apiKey?: string;
 }

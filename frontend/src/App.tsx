@@ -180,6 +180,7 @@ function App() {
           onSelect={setSelectedId}
           onMoveComponent={moveComponent}
           onAddWire={addWire}
+          onSetSheet={setSheet}
           mode={mode}
           showGrid={showGrid}
         />

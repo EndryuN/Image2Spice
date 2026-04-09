@@ -17,6 +17,8 @@ class OpenRouterError(Exception):
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+OPENAI_BASE_URL = "https://api.openai.com/v1"
+CLAUDE_BASE_URL = "https://api.anthropic.com/v1"
 
 # Free vision models to try in order if the primary is rate-limited
 OPENROUTER_FALLBACKS = [
@@ -44,6 +46,14 @@ async def chat_with_vision(
         if not api_key:
             raise ValueError("API key is required for OpenRouter provider")
         return await _call_openrouter_with_retry(model, system_prompt, user_prompt, image_bytes, api_key)
+    elif provider == "openai":
+        if not api_key:
+            raise ValueError("API key is required for OpenAI provider")
+        return await _call_openai(model, system_prompt, user_prompt, image_bytes, api_key)
+    elif provider == "claude":
+        if not api_key:
+            raise ValueError("API key is required for Claude provider")
+        return await _call_claude(model, system_prompt, user_prompt, image_bytes, api_key)
     else:
         raise ValueError(f"Unknown provider: {provider}")
 
@@ -68,7 +78,7 @@ async def _call_ollama(
         "stream": False,
         "options": {"temperature": 0.1},
     }
-    async with httpx.AsyncClient(timeout=600.0) as client:
+    async with httpx.AsyncClient(timeout=1200.0) as client:
         resp = await client.post(f"{OLLAMA_BASE_URL}/api/chat", json=payload)
         resp.raise_for_status()
         return resp.json()["message"]["content"]
@@ -146,7 +156,7 @@ async def _call_openrouter(
         "X-Title": "image2spice",
         "Content-Type": "application/json",
     }
-    async with httpx.AsyncClient(timeout=120.0) as client:
+    async with httpx.AsyncClient(timeout=300.0) as client:
         resp = await client.post(
             f"{OPENROUTER_BASE_URL}/chat/completions",
             json=payload,
@@ -158,4 +168,100 @@ async def _call_openrouter(
         data = resp.json()
         content = data["choices"][0]["message"]["content"]
         logger.info("OpenRouter [%s] response (%d chars): %s...", model, len(content), content[:100])
+        return content
+
+
+async def _call_openai(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    image_bytes: bytes,
+    api_key: str,
+) -> str:
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/png;base64,{image_b64}",
+                        },
+                    },
+                ],
+            },
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4096,
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        resp = await client.post(
+            f"{OPENAI_BASE_URL}/chat/completions",
+            json=payload,
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            logger.error("OpenAI error %d on %s: %s", resp.status_code, model, resp.text[:500])
+            raise ValueError(f"OpenAI error ({resp.status_code}): {resp.text[:500]}")
+        data = resp.json()
+        content = data["choices"][0]["message"]["content"]
+        logger.info("OpenAI [%s] response (%d chars): %s...", model, len(content), content[:100])
+        return content
+
+
+async def _call_claude(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    image_bytes: bytes,
+    api_key: str,
+) -> str:
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    payload = {
+        "model": model,
+        "max_tokens": 4096,
+        "system": system_prompt,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": image_b64,
+                        },
+                    },
+                    {"type": "text", "text": user_prompt},
+                ],
+            },
+        ],
+    }
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=300.0) as client:
+        resp = await client.post(
+            f"{CLAUDE_BASE_URL}/messages",
+            json=payload,
+            headers=headers,
+        )
+        if resp.status_code != 200:
+            logger.error("Claude error %d on %s: %s", resp.status_code, model, resp.text[:500])
+            raise ValueError(f"Claude error ({resp.status_code}): {resp.text[:500]}")
+        data = resp.json()
+        content = data["content"][0]["text"]
+        logger.info("Claude [%s] response (%d chars): %s...", model, len(content), content[:100])
         return content

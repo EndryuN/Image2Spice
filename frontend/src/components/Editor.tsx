@@ -13,6 +13,7 @@ interface EditorProps {
   onSelect: (id: string | null) => void;
   onMoveComponent: (id: string, pos: Position) => void;
   onAddWire: (from: Position, to: Position) => void;
+  onSetSheet: (width: number, height: number) => void;
   mode: "select" | "wire";
   showGrid: boolean;
 }
@@ -24,6 +25,7 @@ export function Editor({
   onSelect,
   onMoveComponent,
   onAddWire,
+  onSetSheet,
   mode,
   showGrid,
 }: EditorProps) {
@@ -300,7 +302,7 @@ export function Editor({
         ))}
       </svg>
 
-      {/* Zoom controls overlay */}
+      {/* Bottom bar overlay */}
       <div
         style={{
           position: "absolute",
@@ -308,19 +310,71 @@ export function Editor({
           left: 8,
           display: "flex",
           alignItems: "center",
-          gap: 4,
-          background: "var(--bg-panel)",
-          border: "1px solid var(--color-border)",
-          borderRadius: 6,
-          padding: "2px 4px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          gap: 8,
         }}
       >
-        <button onClick={() => zoomBy(1.25)} style={zoomBtnStyle} title="Zoom out">-</button>
-        <button onClick={zoomFit} style={{ ...zoomBtnStyle, minWidth: 44, fontSize: 11 }} title="Fit to sheet">
-          {zoomPercent}%
-        </button>
-        <button onClick={() => zoomBy(0.8)} style={zoomBtnStyle} title="Zoom in">+</button>
+        {/* Zoom controls */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            background: "var(--bg-panel)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 6,
+            padding: "2px 4px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+          }}
+        >
+          <button onClick={() => zoomBy(1.25)} style={zoomBtnStyle} title="Zoom out">-</button>
+          <button onClick={zoomFit} style={{ ...zoomBtnStyle, minWidth: 44, fontSize: 11 }} title="Fit to sheet">
+            {zoomPercent}%
+          </button>
+          <button onClick={() => zoomBy(0.8)} style={zoomBtnStyle} title="Zoom in">+</button>
+        </div>
+
+        {/* Canvas size */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            background: "var(--bg-panel)",
+            border: "1px solid var(--color-border)",
+            borderRadius: 6,
+            padding: "2px 6px",
+            boxShadow: "0 2px 8px rgba(0,0,0,0.2)",
+            fontSize: 11,
+            color: "var(--color-text)",
+          }}
+        >
+          <span style={{ color: "var(--color-text-muted)" }}>Sheet</span>
+          <input
+            type="number"
+            value={schematic.sheet.width}
+            min={64}
+            max={9999}
+            onChange={(e) => {
+              const v = Math.max(64, Math.min(9999, Number(e.target.value) || 64));
+              onSetSheet(v, schematic.sheet.height);
+            }}
+            style={sheetInputStyle}
+            title="Sheet width"
+          />
+          <span style={{ color: "var(--color-text-muted)" }}>x</span>
+          <input
+            type="number"
+            value={schematic.sheet.height}
+            min={64}
+            max={9999}
+            onChange={(e) => {
+              const v = Math.max(64, Math.min(9999, Number(e.target.value) || 64));
+              onSetSheet(schematic.sheet.width, v);
+            }}
+            style={sheetInputStyle}
+            title="Sheet height"
+          />
+        </div>
       </div>
     </div>
   );
@@ -336,4 +390,15 @@ const zoomBtnStyle: React.CSSProperties = {
   fontSize: 14,
   fontWeight: "bold",
   lineHeight: 1,
+};
+
+const sheetInputStyle: React.CSSProperties = {
+  width: 52,
+  padding: "1px 4px",
+  border: "1px solid var(--color-border)",
+  borderRadius: 3,
+  background: "var(--bg-canvas, var(--bg-panel))",
+  color: "var(--color-text)",
+  fontSize: 11,
+  textAlign: "center",
 };

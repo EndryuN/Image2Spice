@@ -39,6 +39,37 @@ async def llm_status(provider: str = "local", api_key: str = ""):
                 return {"online": False, "error": f"API returned {resp.status_code}"}
         except Exception as exc:
             return {"online": False, "error": str(exc)}
+    elif provider == "openai":
+        if not api_key:
+            return {"online": False, "error": "No API key provided"}
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.openai.com/v1/models",
+                    headers={"Authorization": f"Bearer {api_key}"},
+                )
+                if resp.status_code == 200:
+                    return {"online": True}
+                return {"online": False, "error": f"API returned {resp.status_code}"}
+        except Exception as exc:
+            return {"online": False, "error": str(exc)}
+    elif provider == "claude":
+        if not api_key:
+            return {"online": False, "error": "No API key provided"}
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.get(
+                    "https://api.anthropic.com/v1/models",
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                    },
+                )
+                if resp.status_code == 200:
+                    return {"online": True}
+                return {"online": False, "error": f"API returned {resp.status_code}"}
+        except Exception as exc:
+            return {"online": False, "error": str(exc)}
     return {"online": False}
 
 
