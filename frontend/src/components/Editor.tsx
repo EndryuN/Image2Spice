@@ -200,6 +200,13 @@ export function Editor({
         onMouseDown={(e) => startDrag(comp.id, e)}
         style={{ cursor: mode === "select" ? "grab" : "default" }}
       >
+        {/* Invisible hit area for easier selection */}
+        <rect
+          x={-10} y={-14}
+          width={(dictComp?.symbol.width ?? 64) + 20}
+          height={(dictComp?.symbol.height ?? 32) + 32}
+          fill="transparent"
+        />
         {isSelected && dictComp && (
           <rect
             x={-4} y={-4}
@@ -244,7 +251,7 @@ export function Editor({
       >
         <defs>
           <pattern id="grid" width={16} height={16} patternUnits="userSpaceOnUse">
-            <circle cx={0} cy={0} r={0.5} fill="var(--color-grid)" />
+            <circle cx={8} cy={8} r={1.5} fill="var(--color-grid)" />
           </pattern>
         </defs>
         {/* Sheet area */}
