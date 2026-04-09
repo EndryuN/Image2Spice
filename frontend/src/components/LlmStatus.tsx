@@ -158,7 +158,7 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
                 onChange={() =>
                   onProviderChange({
                     provider: "openrouter",
-                    model: "google/gemma-4-26b-a4b-it:free",
+                    model: "google/gemma-4-31b-it:free",
                     apiKey: provider.apiKey ?? "",
                   })
                 }

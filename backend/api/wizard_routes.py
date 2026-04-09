@@ -2,10 +2,12 @@ import json
 import logging
 from pathlib import Path
 
+import httpx
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from pydantic import ValidationError
 
 from services.vision import identify_components, read_directives, describe_layout, describe_wires
+from services.llm_client import OpenRouterError
 from services.layout import compute_layout
 from services.wire_router import compute_wires
 from services.schemas import normalize_pin
@@ -47,7 +49,9 @@ async def wizard_identify(
     provider, api_key, model = _parse_provider(provider_json)
     try:
         components = await identify_components(image_bytes, provider=provider, api_key=api_key, model=model)
-    except (ValidationError, ValueError) as exc:
+    except httpx.HTTPError as exc:
+        raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
+    except (ValidationError, ValueError, OpenRouterError) as exc:
         raise HTTPException(400, detail={"error": "Component identification failed", "details": str(exc)})
     return {"components": components}
 
@@ -62,7 +66,9 @@ async def wizard_directives(
     provider, api_key, model = _parse_provider(provider_json)
     try:
         directives = await read_directives(image_bytes, provider=provider, api_key=api_key, model=model)
-    except (ValidationError, ValueError) as exc:
+    except httpx.HTTPError as exc:
+        raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
+    except (ValidationError, ValueError, OpenRouterError) as exc:
         raise HTTPException(400, detail={"error": "Directive reading failed", "details": str(exc)})
     return {"directives": directives}
 
@@ -80,7 +86,9 @@ async def wizard_layout(
 
     try:
         layout_desc = await describe_layout(image_bytes, components, provider=provider, api_key=api_key, model=model)
-    except (ValidationError, ValueError) as exc:
+    except httpx.HTTPError as exc:
+        raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
+    except (ValidationError, ValueError, OpenRouterError) as exc:
         raise HTTPException(400, detail={"error": "Layout description failed", "details": str(exc)})
 
     dictionary = _load_dictionary()
@@ -121,7 +129,9 @@ async def wizard_wires(
 
     try:
         wire_desc = await describe_wires(image_bytes, components, pin_defs, provider=provider, api_key=api_key, model=model)
-    except (ValidationError, ValueError) as exc:
+    except httpx.HTTPError as exc:
+        raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
+    except (ValidationError, ValueError, OpenRouterError) as exc:
         raise HTTPException(400, detail={"error": "Wire tracing failed", "details": str(exc)})
 
     # Normalize pin names in wire descriptions

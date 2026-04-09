@@ -20,13 +20,14 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Free vision models to try in order if the primary is rate-limited
 OPENROUTER_FALLBACKS = [
+    "google/gemma-4-31b-it:free",
     "google/gemma-4-26b-a4b-it:free",
     "nvidia/nemotron-nano-12b-v2-vl:free",
     "meta-llama/llama-3.2-11b-vision-instruct:free",
 ]
 
-_MAX_RETRIES = 3
-_RETRY_DELAYS = [5, 15, 30]  # seconds
+_MAX_RETRIES = 5
+_RETRY_DELAYS = [3, 6, 12, 20, 30]  # seconds
 
 
 async def chat_with_vision(

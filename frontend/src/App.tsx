@@ -65,9 +65,34 @@ function App() {
   }, [undo, redo]);
 
   const handleUpload = useCallback((file: File) => {
-    setImageFile(file);
-    setImageUrl(URL.createObjectURL(file));
-    setStatus("Image loaded. Click Generate to analyze.");
+    if (file.type === "image/svg+xml") {
+      // Rasterize SVG to PNG for vision model compatibility
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || 1024;
+        canvas.height = img.naturalHeight || 768;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          if (blob) {
+            const pngFile = new File([blob], file.name.replace(/\.svg$/i, ".png"), { type: "image/png" });
+            setImageFile(pngFile);
+            setImageUrl(URL.createObjectURL(pngFile));
+            setStatus("SVG converted to PNG. Click Generate to analyze.");
+          }
+        }, "image/png");
+      };
+      img.src = url;
+    } else {
+      setImageFile(file);
+      setImageUrl(URL.createObjectURL(file));
+      setStatus("Image loaded. Click Generate to analyze.");
+    }
   }, []);
 
   const handleGenerate = useCallback(() => {
