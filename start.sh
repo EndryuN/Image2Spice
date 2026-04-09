@@ -7,7 +7,7 @@ echo "Starting image2asc..."
 echo
 
 # Check if Ollama is running (optional — OpenRouter can be used instead)
-if ! curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+if ! curl -s --max-time 3 http://localhost:11434/api/tags >/dev/null 2>&1; then
     echo "[*] Ollama is not running. You can use OpenRouter instead."
     echo "    To use local models, start Ollama first: ollama serve"
     echo
