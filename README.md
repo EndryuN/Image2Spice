@@ -1,17 +1,17 @@
 # image2asc
 
-Convert LTspice circuit schematic screenshots into `.asc` files using a local vision model (qwen3-vl:8b via Ollama) and a multi-step wizard pipeline.
+Convert LTspice circuit schematic screenshots into `.asc` files using a vision model and a multi-step wizard pipeline. Supports local inference via Ollama or cloud inference via [OpenRouter](https://openrouter.ai/).
 
 ![LTspice schematic example](preview.png)
 
 ## How It Works
 
 ```
-Image -> Wizard (4 steps via Ollama) -> SchematicIR -> deterministic asc_generator -> .asc
-                                              |
-                                     SVG visual editor (review/adjust)
-                                              |
-                                       Export .asc
+Image -> Wizard (4 steps via Ollama or OpenRouter) -> SchematicIR -> deterministic asc_generator -> .asc
+                                                            |
+                                                   SVG visual editor (review/adjust)
+                                                            |
+                                                     Export .asc
 ```
 
 1. Upload an LTspice screenshot
@@ -28,15 +28,23 @@ Image -> Wizard (4 steps via Ollama) -> SchematicIR -> deterministic asc_generat
 
 - [Python 3.10+](https://www.python.org/downloads/)
 - [Node.js 18+](https://nodejs.org/)
-- [Ollama](https://ollama.com/)
+- One of the following vision model providers:
 
-### Install Ollama Model
+### Option A: Local (Ollama)
+
+Install [Ollama](https://ollama.com/) and pull the vision model:
 
 ```bash
 ollama pull qwen3-vl:8b    # Vision model (~6 GB)
 ```
 
-Only the vision model is needed - `.asc` generation is fully deterministic, no text-only LLM required.
+### Option B: Cloud (OpenRouter)
+
+Get a free API key from [openrouter.ai](https://openrouter.ai/). No local GPU required.
+
+The recommended model is **`qwen/qwen3.6-plus:free`** (selected by default). If rate-limited, the app automatically falls back to `google/gemma-3-27b-it:free` and `google/gemma-3-12b-it:free`.
+
+`.asc` generation is fully deterministic - no text-only LLM is needed for either provider.
 
 ## Setup
 
@@ -82,16 +90,17 @@ Starts backend + frontend and opens the browser automatically.
 
 ## Usage
 
-1. **Upload** - Click "Upload Image" and select an LTspice screenshot (PNG recommended)
-2. **Generate** - Click "Generate" to run the wizard (takes 30-120s depending on hardware)
-3. **Edit** - Use the visual editor to fix any issues:
+1. **Choose provider** - Click the status indicator in the toolbar to switch between Local (Ollama) and OpenRouter. For OpenRouter, enter your API key and click "Connect"
+2. **Upload** - Click "Upload Image" and select an LTspice screenshot (PNG recommended)
+3. **Generate** - Click "Generate" to run the wizard (takes 30-120s depending on provider/hardware)
+4. **Edit** - Use the visual editor to fix any issues:
    - **Select mode** - Click components to select, drag to move
    - **Wire mode** - Click two points to draw a wire
    - **Component palette** - Add new components from the sidebar
    - **Property panel** - Edit instance names, values, and rotations
    - **Zoom/Pan** - Scroll to zoom, middle-click drag to pan
    - **Undo/Redo** - Ctrl+Z / Ctrl+Y
-4. **Export** - Click "Export .asc" to download the file
+5. **Export** - Click "Export .asc" to download the file
 
 ## Project Structure
 
@@ -104,7 +113,8 @@ image2asc/
       wizard_routes.py        # /api/wizard/{identify,directives,layout,wires}
     services/
       ollama_client.py        # Shared Ollama HTTP client (localhost:11434)
-      vision.py               # Wizard vision calls, VISION_MODEL = "qwen3-vl:8b"
+      llm_client.py           # Unified vision client (Ollama + OpenRouter)
+      vision.py               # Wizard vision calls, provider-aware
       asc_generator.py        # Deterministic SchematicIR -> .asc text
       asy_parser.py           # .asy file parser + build_dictionary_from_asy()
       layout.py               # Spatial description -> grid coordinates (16px snap)
@@ -125,6 +135,7 @@ image2asc/
         AscPreview.tsx        # Live .asc text preview
         ScreenshotPanel.tsx   # Source image display
         GenerateWizard.tsx    # Step-by-step generation modal
+        LlmStatus.tsx         # Provider switcher (Ollama / OpenRouter)
       hooks/
         useSchematic.ts       # Schematic CRUD + undo/redo history
         useHistory.ts         # Undo/redo stack implementation
@@ -145,6 +156,7 @@ image2asc/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/health` | Health check |
+| GET | `/api/llm-status` | Check provider connectivity (Ollama or OpenRouter) |
 | GET | `/api/dictionary` | Component + directive definitions |
 | POST | `/api/refine` | Convert JSON IR to .asc (deterministic) |
 | POST | `/api/validate` | Validate .asc syntax |
@@ -180,11 +192,13 @@ Tests that call Ollama vision endpoints are mocked - no live Ollama needed for t
 
 ## Troubleshooting
 
-**Ollama must be running** - Start `ollama serve` before the backend. Vision endpoints will 500 if Ollama is unreachable.
+**Ollama must be running** (local mode) - Start `ollama serve` before the backend. Vision endpoints will 500 if Ollama is unreachable.
+
+**OpenRouter rate limits** - Free-tier models have rate limits. The app automatically retries with backoff and falls back to alternative free models (`gemma-3-27b-it`, `gemma-3-12b-it`).
 
 **Port conflicts** - Run `kill-port.bat` to free ports 8000 and 5173. `start.bat` does this automatically.
 
-**Timeout errors** - The first Ollama call is slow (model loading into VRAM). The client timeout is 600s in `ollama_client.py` - increase if needed.
+**Timeout errors** - The first Ollama call is slow (model loading into VRAM). Local timeout is 600s, OpenRouter timeout is 120s.
 
 **CORS errors** - Backend only allows `http://localhost:5173`. If the frontend port changes, update `main.py`.
 
@@ -192,6 +206,11 @@ Tests that call Ollama vision endpoints are mocked - no live Ollama needed for t
 
 ## Hardware Requirements
 
+**Local (Ollama):**
 - **Minimum**: 8 GB VRAM GPU (model runs at Q4 quantization)
 - **Recommended**: 12+ GB VRAM for faster inference
 - Only one model (~6 GB VRAM) is needed at runtime
+
+**Cloud (OpenRouter):**
+- No GPU required - runs entirely in the cloud
+- Free tier available with the recommended model
