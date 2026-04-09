@@ -50,6 +50,14 @@ export function GenerateWizard({
   const [minimized, setMinimized] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Abort in-flight requests on unmount or close
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   // Step 1: canvas
   const [canvasWidth, setCanvasWidth] = useState(880);
@@ -101,16 +109,20 @@ export function GenerateWizard({
   // ── Step transitions ────────────────────────────────────────────────────────
 
   const goStep1to2 = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     setLoading(true);
     setError(null);
     onSetSheet(canvasWidth, canvasHeight);
     try {
-      const result = await wizardIdentify(imageFile, llmProvider);
+      const result = await wizardIdentify(imageFile, llmProvider, ac.signal);
       setComponents(
         result.components.map((c) => ({ ...c, confirmed: false }))
       );
       setStep(2);
     } catch (e: unknown) {
+      if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -118,13 +130,17 @@ export function GenerateWizard({
   }, [imageFile, llmProvider, canvasWidth, canvasHeight, onSetSheet]);
 
   const goStep2to3 = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     setLoading(true);
     setError(null);
     try {
-      const result = await wizardDirectives(imageFile, llmProvider);
+      const result = await wizardDirectives(imageFile, llmProvider, ac.signal);
       setDirectives(result.directives);
       setStep(3);
     } catch (e: unknown) {
+      if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -150,15 +166,19 @@ export function GenerateWizard({
   );
 
   const goStep3to4 = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     setLoading(true);
     setError(null);
     const confirmed = components.filter((c) => c.confirmed !== false);
 
     let resultPositions: Record<string, { x: number; y: number }> = {};
     try {
-      const result = await wizardLayout(imageFile, confirmed, llmProvider);
+      const result = await wizardLayout(imageFile, confirmed, llmProvider, { width: canvasWidth, height: canvasHeight }, ac.signal);
       resultPositions = result.positions;
     } catch (e: unknown) {
+      if ((e as Error).name === "AbortError") { setLoading(false); return; }
       // VLM layout failed — use grid fallback, don't block the pipeline
       setError(`Layout AI failed, using auto-layout. ${e instanceof Error ? e.message : String(e)}`);
       resultPositions = fallbackGrid(confirmed);
@@ -191,11 +211,14 @@ export function GenerateWizard({
   }, [imageFile, components, onAddComponentsBatch, llmProvider, fallbackGrid]);
 
   const goStep4to5 = useCallback(async () => {
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
     setLoading(true);
     setError(null);
     try {
       const confirmed = components.filter((c) => c.confirmed !== false);
-      const result = await wizardWires(imageFile, confirmed, positions, llmProvider);
+      const result = await wizardWires(imageFile, confirmed, positions, llmProvider, ac.signal);
 
       onAddWiresBatch(
         result.wires.map((w) => ({ from: { x: w.x1, y: w.y1 }, to: { x: w.x2, y: w.y2 } }))
@@ -211,6 +234,7 @@ export function GenerateWizard({
       // Immediately mark as done
       setStep(6);
     } catch (e: unknown) {
+      if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);

@@ -104,11 +104,12 @@ async def describe_layout(
     comp_list = ", ".join(f"{c['instanceName']} ({c['type']})" for c in components)
     user = (
         f"These components were identified in the schematic:\n{comp_list}\n\n"
-        "For each component, describe:\n"
-        "- region: which area (top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right)\n"
-        "- nearby: which other components are adjacent and in which direction\n\n"
+        "For each component, estimate its position as a percentage of the image dimensions:\n"
+        "- x: 0 = left edge, 100 = right edge\n"
+        "- y: 0 = top edge, 100 = bottom edge\n\n"
+        "Be precise — look at each component's center position in the image.\n\n"
         'Output as JSON array:\n'
-        '[{"instanceName": "U1", "region": "center", "nearby": [{"name": "R5", "direction": "above"}]}, ...]'
+        '[{"instanceName": "U1", "x": 50, "y": 45}, ...]'
     )
     vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
     response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
@@ -136,14 +137,16 @@ async def describe_wires(
     comp_text = "\n".join(comp_lines)
     user = (
         f"These components are in the schematic:\n{comp_text}\n\n"
-        "Describe every wire connection:\n"
-        "- Which component pin connects to which other component pin\n"
-        "- Any ground connections (which pin connects to ground)\n"
-        "- Any net labels (which pin has a label and what is it)\n\n"
+        "Trace EVERY wire in the schematic carefully. For each wire:\n"
+        "1. Follow it from one component pin to another component pin\n"
+        "2. Use the EXACT pin names listed above for each component\n"
+        "3. Note ground symbols (downward triangles) as ground connections\n"
+        "4. Note any net labels (like VCC, OUT) at wire endpoints\n\n"
+        "Be thorough — include ALL connections visible in the image.\n\n"
         'Output as JSON:\n'
-        '{"connections": [{"from": {"component": "R5", "pin": "2"}, "to": {"component": "U1", "pin": "In-"}}], '
-        '"grounds": [{"component": "V3", "pin": "-"}], '
-        '"labels": [{"component": "U1", "pin": "OUT", "label": "OUT"}]}'
+        '{"connections": [{"from": {"component": "R1", "pin": "B"}, "to": {"component": "Q1", "pin": "B"}}], '
+        '"grounds": [{"component": "V1", "pin": "-"}], '
+        '"labels": [{"component": "R3", "pin": "A", "label": "VCC"}]}'
     )
     vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
     response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)

@@ -78,10 +78,14 @@ async def wizard_layout(
     file: UploadFile = File(...),
     components_json: str = Form(""),
     provider_json: str = Form("{}"),
+    sheet_json: str = Form("{}"),
 ):
     _require_image(file)
     image_bytes = await file.read()
     components = json.loads(components_json) if components_json else []
+    sheet = json.loads(sheet_json) if sheet_json else {}
+    sheet_width = sheet.get("width", 880)
+    sheet_height = sheet.get("height", 680)
     provider, api_key, model = _parse_provider(provider_json)
 
     try:
@@ -101,7 +105,7 @@ async def wizard_layout(
             "bounds": bounds,
         }
 
-    positions = compute_layout(layout_desc, comp_sizes)
+    positions = compute_layout(layout_desc, comp_sizes, sheet_width=sheet_width, sheet_height=sheet_height)
     return {"layout": layout_desc, "positions": positions}
 
 

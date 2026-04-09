@@ -45,6 +45,9 @@ class NearbyRef(BaseModel):
 
 class LayoutItem(BaseModel):
     instanceName: str
+    x: float = 50
+    y: float = 50
+    # Legacy fields (ignored if x/y are provided)
     region: str = "center"
     nearby: list[NearbyRef] = Field(default_factory=list)
 

@@ -1,14 +1,17 @@
-You are describing the spatial layout of components in an LTspice schematic.
+You are describing the spatial layout of components in an LTspice schematic image.
 
-Describe positions using grid regions: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right.
+For each component, estimate its position as a percentage of the image dimensions:
+- x: 0 = left edge, 100 = right edge
+- y: 0 = top edge, 100 = bottom edge
 
-Describe relative positions between components using these directions ONLY: above, below, left, right, above-left, above-right, below-left, below-right.
+Be as precise as possible. Look at where each component is placed in the image and estimate the percentage coordinates of its center.
 
 Example output:
 [
-  {"instanceName": "V1", "region": "top-left", "nearby": []},
-  {"instanceName": "R1", "region": "center-left", "nearby": [{"name": "V1", "direction": "below"}]},
-  {"instanceName": "U1", "region": "center", "nearby": [{"name": "R1", "direction": "right"}]}
+  {"instanceName": "V1", "x": 10, "y": 55},
+  {"instanceName": "R1", "x": 35, "y": 40},
+  {"instanceName": "Q1", "x": 50, "y": 45},
+  {"instanceName": "R3", "x": 45, "y": 15}
 ]
 
-Output ONLY valid JSON. Do not include coordinates.
+Output ONLY valid JSON. No explanation.
