@@ -49,7 +49,7 @@ async def wizard_identify(
     provider, api_key, model = _parse_provider(provider_json)
     try:
         components = await identify_components(image_bytes, provider=provider, api_key=api_key, model=model)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, httpx.TransportError) as exc:
         raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
     except (ValidationError, ValueError, OpenRouterError) as exc:
         raise HTTPException(400, detail={"error": "Component identification failed", "details": str(exc)})
@@ -66,7 +66,7 @@ async def wizard_directives(
     provider, api_key, model = _parse_provider(provider_json)
     try:
         directives = await read_directives(image_bytes, provider=provider, api_key=api_key, model=model)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, httpx.TransportError) as exc:
         raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
     except (ValidationError, ValueError, OpenRouterError) as exc:
         raise HTTPException(400, detail={"error": "Directive reading failed", "details": str(exc)})
@@ -86,7 +86,7 @@ async def wizard_layout(
 
     try:
         layout_desc = await describe_layout(image_bytes, components, provider=provider, api_key=api_key, model=model)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, httpx.TransportError) as exc:
         raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
     except (ValidationError, ValueError, OpenRouterError) as exc:
         raise HTTPException(400, detail={"error": "Layout description failed", "details": str(exc)})
@@ -129,7 +129,7 @@ async def wizard_wires(
 
     try:
         wire_desc = await describe_wires(image_bytes, components, pin_defs, provider=provider, api_key=api_key, model=model)
-    except httpx.HTTPError as exc:
+    except (httpx.HTTPError, httpx.TransportError) as exc:
         raise HTTPException(400, detail={"error": "Cannot reach LLM provider. Check Ollama is running or switch to OpenRouter.", "details": str(exc)})
     except (ValidationError, ValueError, OpenRouterError) as exc:
         raise HTTPException(400, detail={"error": "Wire tracing failed", "details": str(exc)})
