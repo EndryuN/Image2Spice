@@ -122,3 +122,79 @@ class CircuitGraph:
                 name = f"net_{auto_idx}"
                 auto_idx += 1
             self.nets[name] = Net(name=name, pins=sorted(pins))
+
+    def assign_tiers(self) -> None:
+        if not self.components or not self.nets:
+            return
+
+        # Build pin -> net name mapping
+        pin_net: dict[tuple[str, str], str] = {}
+        for net_name, net in self.nets.items():
+            for pin in net.pins:
+                pin_net[pin] = net_name
+
+        # Create virtual singleton nets for component pins not in any net
+        virtual_idx = 0
+        for name, node in self.components.items():
+            for pin_def in node.pins:
+                pin_key = (name, pin_def["name"])
+                if pin_key not in pin_net:
+                    vnet_name = f"_virtual_{virtual_idx}"
+                    virtual_idx += 1
+                    pin_net[pin_key] = vnet_name
+
+        # For each component, find which nets its first and last pin belong to
+        comp_pin_nets: dict[str, tuple[str | None, str | None]] = {}
+        for name, node in self.components.items():
+            if len(node.pins) >= 2:
+                net_a = pin_net.get((name, node.pins[0]["name"]))
+                net_b = pin_net.get((name, node.pins[-1]["name"]))
+                comp_pin_nets[name] = (net_a, net_b)
+            elif len(node.pins) == 1:
+                comp_pin_nets[name] = (pin_net.get((name, node.pins[0]["name"])), None)
+            else:
+                comp_pin_nets[name] = (None, None)
+
+        # Build net-level graph (nets connected by components)
+        net_graph: dict[str, set[str]] = {}
+        for name, (net_a, net_b) in comp_pin_nets.items():
+            if net_a and net_b and net_a != net_b:
+                net_graph.setdefault(net_a, set()).add(net_b)
+                net_graph.setdefault(net_b, set()).add(net_a)
+
+        # BFS from first net to assign net tiers
+        net_tiers: dict[str, int] = {}
+        if net_graph:
+            # Prefer starting from a net connected to a voltage source
+            start_net = next(iter(net_graph))
+            for name, node in self.components.items():
+                if node.type in ("voltage", "current"):
+                    net_a, _ = comp_pin_nets.get(name, (None, None))
+                    if net_a and net_a in net_graph:
+                        start_net = net_a
+                        break
+            queue = [start_net]
+            net_tiers[start_net] = 0
+            while queue:
+                current = queue.pop(0)
+                for neighbor in net_graph.get(current, set()):
+                    if neighbor not in net_tiers:
+                        net_tiers[neighbor] = net_tiers[current] + 1
+                        queue.append(neighbor)
+
+        # Assign component tiers from their net tiers
+        # Sources use min (placed at driving side), passives use max (placed at load side)
+        for name, node in self.components.items():
+            net_a, net_b = comp_pin_nets.get(name, (None, None))
+            tier_a = net_tiers.get(net_a, 0) if net_a else 0
+            tier_b = net_tiers.get(net_b, 0) if net_b else 0
+            if node.type in ("voltage", "current"):
+                node.tier = min(tier_a, tier_b)
+            else:
+                node.tier = max(tier_a, tier_b)
+
+        # Build tier list
+        tier_map: dict[int, list[str]] = {}
+        for name, node in self.components.items():
+            tier_map.setdefault(node.tier, []).append(name)
+        self.tiers = [Tier(index=idx, components=comps) for idx, comps in sorted(tier_map.items())]

@@ -98,3 +98,38 @@ def test_build_nets_with_label():
             break
     assert v1_plus_net is not None
     assert v1_plus_net.name == "VCC"
+
+
+def _build_circuit04_graph() -> CircuitGraph:
+    graph = CircuitGraph(SAMPLE_DICTIONARY)
+    graph.add_components(SAMPLE_COMPONENTS)
+    graph.build_nets(SAMPLE_CONNECTIONS, SAMPLE_GROUNDS, SAMPLE_LABELS)
+    return graph
+
+
+def test_assign_tiers_parallel_circuit():
+    graph = _build_circuit04_graph()
+    graph.assign_tiers()
+    assert len(graph.tiers) >= 2
+    r1_tier = graph.components["R1"].tier
+    r2_tier = graph.components["R2"].tier
+    r3_tier = graph.components["R3"].tier
+    assert r1_tier == r2_tier == r3_tier
+
+
+def test_assign_tiers_series_circuit():
+    comps = [
+        {"name": "R1", "type": "res", "value": "1k"},
+        {"name": "R2", "type": "res", "value": "2k"},
+        {"name": "R3", "type": "res", "value": "3k"},
+    ]
+    conns = [
+        {"from": {"component": "R1", "pin": "B"}, "to": {"component": "R2", "pin": "A"}},
+        {"from": {"component": "R2", "pin": "B"}, "to": {"component": "R3", "pin": "A"}},
+    ]
+    graph = CircuitGraph(SAMPLE_DICTIONARY)
+    graph.add_components(comps)
+    graph.build_nets(conns, [], [])
+    graph.assign_tiers()
+    assert graph.components["R1"].tier != graph.components["R2"].tier
+    assert graph.components["R2"].tier != graph.components["R3"].tier
