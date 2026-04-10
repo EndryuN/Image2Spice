@@ -653,8 +653,7 @@ export function Editor({
             )}
           </g>
           );
-        }
-        ))}
+        })}
         {schematic.text.map((t) => (
           <text key={t.id} x={t.position.x} y={t.position.y} fontSize={11} fill="var(--color-text)">
             {t.content}

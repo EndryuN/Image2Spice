@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 
 from services.circuit_graph import CircuitGraph
+from services.layout import compute_layout_from_graph
 from services.wire_router import route_connections, route_nets, route_with_paths
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,16 @@ def _normalize_analysis(analysis: dict) -> tuple[list[dict], list[dict], list[di
             else:
                 labels.append(lbl)
 
-    return components, connections, grounds, labels
+    # Filter out labels that look like component values (e.g. "15 V", "10V", "1k")
+    # These are VLM errors — the value should be on the component, not a flag
+    import re
+    _VALUE_PATTERN = re.compile(r"^\d+\.?\d*\s*[VvAaΩ]$|^\d+\.?\d*\s*[kKmMuUnNpP][VvAaΩFfHh]?$")
+    filtered_labels = [
+        lbl for lbl in labels
+        if not _VALUE_PATTERN.match(lbl.get("label", "").strip())
+    ]
+
+    return components, connections, grounds, filtered_labels
 
 
 def build_graph_from_analysis(
@@ -115,6 +125,7 @@ def build_asc(
 
     # Place components using VLM percentage positions → canvas coordinates
     raw_comps = analysis.get("components", [])
+    vlm_positions: dict[str, tuple[int, int]] = {}
     for comp_data in raw_comps:
         name = comp_data.get("name", "")
         node = graph.components.get(name)
@@ -127,36 +138,50 @@ def build_asc(
         x = _snap(int(_MARGIN + (pct_x / 100) * (sheet_width - 2 * _MARGIN)))
         y = _snap(int(_MARGIN + (pct_y / 100) * (sheet_height - 2 * _MARGIN)))
 
-        node.position = (x, y)
+        vlm_positions[name] = (x, y)
 
         # Use VLM orientation if graph didn't assign horizontal
         vlm_orient = comp_data.get("orientation", "vertical")
         if vlm_orient == "horizontal" and node.resolved_rotation in ("R0", "R180"):
             node.resolved_rotation = "R90"
 
-    # ── Column alignment: snap directly-connected components to same X ──
-    # If two components share a direct connection and are roughly in the
-    # same vertical column (within 20% of sheet width), align their X.
-    _COLUMN_THRESHOLD = int(sheet_width * 0.2)
-    for conn in connections:
-        f = conn.get("from", {})
-        t = conn.get("to", {})
-        name_a = f.get("component", "")
-        name_b = t.get("component", "")
-        node_a = graph.components.get(name_a)
-        node_b = graph.components.get(name_b)
-        if not node_a or not node_b or not node_a.position or not node_b.position:
-            continue
-        ax, ay = node_a.position
-        bx, by = node_b.position
-        dx = abs(ax - bx)
-        dy = abs(ay - by)
-        # If they're roughly in the same column and vertically separated
-        if dx < _COLUMN_THRESHOLD and dy > dx:
-            # Snap the lower component's X to match the upper one
-            avg_x = _snap((ax + bx) // 2)
-            node_a.position = (avg_x, ay)
-            node_b.position = (avg_x, by)
+    # Check if VLM provided distinct positions — if all positions are
+    # identical the VLM likely omitted x/y fields (they default to 50%).
+    unique_positions = set(vlm_positions.values())
+    vlm_useful = len(unique_positions) > 1 and len(vlm_positions) > 1
+
+    if vlm_useful:
+        for name, pos in vlm_positions.items():
+            node = graph.components.get(name)
+            if node:
+                node.position = pos
+
+        # Column alignment: snap directly-connected components to same X
+        _COLUMN_THRESHOLD = int(sheet_width * 0.2)
+        for conn in connections:
+            f = conn.get("from", {})
+            t = conn.get("to", {})
+            name_a = f.get("component", "")
+            name_b = t.get("component", "")
+            node_a = graph.components.get(name_a)
+            node_b = graph.components.get(name_b)
+            if not node_a or not node_b or not node_a.position or not node_b.position:
+                continue
+            ax, ay = node_a.position
+            bx, by = node_b.position
+            dx = abs(ax - bx)
+            dy = abs(ay - by)
+            if dx < _COLUMN_THRESHOLD and dy > dx:
+                avg_x = _snap((ax + bx) // 2)
+                node_a.position = (avg_x, ay)
+                node_b.position = (avg_x, by)
+    else:
+        # VLM didn't provide useful positions — use tier-based layout
+        logger.info("VLM positions not distinct (%d unique for %d components), using graph layout",
+                     len(unique_positions), len(vlm_positions))
+        positions, (auto_w, auto_h) = compute_layout_from_graph(graph)
+        sheet_width = max(sheet_width, auto_w)
+        sheet_height = max(sheet_height, auto_h)
 
     # Route wires — net-aware bus routing with direct column wires
     wire_result = route_nets(graph)
