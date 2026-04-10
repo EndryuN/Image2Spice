@@ -42,6 +42,8 @@ class CircuitGraph:
         self.tiers: list[Tier] = []
         self.flow_direction: str = "vertical"
         self._parent: dict[tuple[str, str], tuple[str, str]] = {}
+        self._net_tiers: dict[str, int] = {}
+        self._pin_net: dict[tuple[str, str], str] = {}
 
     def add_components(self, components: list[dict]) -> None:
         for comp in components:
@@ -128,10 +130,11 @@ class CircuitGraph:
             return
 
         # Build pin -> net name mapping
-        pin_net: dict[tuple[str, str], str] = {}
+        self._pin_net.clear()
         for net_name, net in self.nets.items():
             for pin in net.pins:
-                pin_net[pin] = net_name
+                self._pin_net[pin] = net_name
+        pin_net = self._pin_net
 
         # Create virtual singleton nets for component pins not in any net
         virtual_idx = 0
@@ -163,7 +166,8 @@ class CircuitGraph:
                 net_graph.setdefault(net_b, set()).add(net_a)
 
         # BFS from first net to assign net tiers
-        net_tiers: dict[str, int] = {}
+        self._net_tiers.clear()
+        net_tiers = self._net_tiers
         if net_graph:
             # Prefer starting from a net connected to a voltage source
             start_net = next(iter(net_graph))
@@ -198,3 +202,29 @@ class CircuitGraph:
         for name, node in self.components.items():
             tier_map.setdefault(node.tier, []).append(name)
         self.tiers = [Tier(index=idx, components=comps) for idx, comps in sorted(tier_map.items())]
+
+    def resolve_orientations(self) -> None:
+        for name, node in self.components.items():
+            if len(node.pins) < 2:
+                node.resolved_rotation = "R0"
+                continue
+
+            pin_a = (name, node.pins[0]["name"])
+            pin_b = (name, node.pins[-1]["name"])
+
+            net_a = self._pin_net.get(pin_a)
+            net_b = self._pin_net.get(pin_b)
+
+            tier_a = self._net_tiers.get(net_a, 0) if net_a else 0
+            tier_b = self._net_tiers.get(net_b, 0) if net_b else 0
+
+            if net_a == net_b:
+                # Both pins on the same net — orient horizontally
+                node.resolved_rotation = "R90"
+            elif tier_a == tier_b:
+                # Different nets at the same tier — default to vertical
+                node.resolved_rotation = "R0"
+            elif tier_a < tier_b:
+                node.resolved_rotation = "R0"
+            else:
+                node.resolved_rotation = "R180"

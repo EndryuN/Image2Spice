@@ -133,3 +133,34 @@ def test_assign_tiers_series_circuit():
     graph.assign_tiers()
     assert graph.components["R1"].tier != graph.components["R2"].tier
     assert graph.components["R2"].tier != graph.components["R3"].tier
+
+
+def test_resolve_orientations_vertical():
+    graph = _build_circuit04_graph()
+    graph.assign_tiers()
+    graph.resolve_orientations()
+    for name in ["R1", "R2", "R3"]:
+        rot = graph.components[name].resolved_rotation
+        assert rot in ("R0", "R180"), f"{name} should be vertical, got {rot}"
+
+
+def test_resolve_orientations_horizontal():
+    graph = CircuitGraph(SAMPLE_DICTIONARY)
+    comps = [
+        {"name": "R1", "type": "res", "value": "1k"},
+        {"name": "R2", "type": "res", "value": "2k"},
+        {"name": "R3", "type": "res", "value": "3k"},
+    ]
+    conns = [
+        {"from": {"component": "R1", "pin": "A"}, "to": {"component": "R3", "pin": "A"}},
+        {"from": {"component": "R1", "pin": "B"}, "to": {"component": "R2", "pin": "B"}},
+        {"from": {"component": "R3", "pin": "B"}, "to": {"component": "R2", "pin": "A"}},
+    ]
+    graph.add_components(comps)
+    graph.build_nets(conns, [], [])
+    graph.assign_tiers()
+    graph.resolve_orientations()
+    r1_rot = graph.components["R1"].resolved_rotation
+    r2_rot = graph.components["R2"].resolved_rotation
+    assert r1_rot in ("R0", "R180")
+    assert r2_rot in ("R0", "R180")
