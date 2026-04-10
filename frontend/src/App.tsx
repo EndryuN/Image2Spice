@@ -10,7 +10,7 @@ import { useSchematic } from "./hooks/useSchematic";
 import { useTheme } from "./hooks/useTheme";
 import { fetchDictionary } from "./lib/api";
 import { generateAsc } from "./lib/ascGenerator";
-import type { Dictionary } from "./types/schematic";
+import type { Dictionary, LlmProvider } from "./types/schematic";
 
 function App() {
   const [dictionary, setDictionary] = useState<Dictionary | null>(null);
@@ -23,18 +23,23 @@ function App() {
   const [showGrid, setShowGrid] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [showPalette, setShowPalette] = useState(true);
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>({ provider: "local", model: "qwen3-vl:8b" });
 
   const { theme, toggleTheme } = useTheme();
 
   const {
     schematic,
+    setSheet,
     moveComponent,
     updateComponent,
     addComponent,
+    addComponentsBatch,
     deleteComponent,
     addWire,
+    addWiresBatch,
     deleteWire,
     addFlag,
+    addFlagsBatch,
     deleteFlag,
     undo,
     redo,
@@ -60,9 +65,34 @@ function App() {
   }, [undo, redo]);
 
   const handleUpload = useCallback((file: File) => {
-    setImageFile(file);
-    setImageUrl(URL.createObjectURL(file));
-    setStatus("Image loaded. Click Generate to analyze.");
+    if (file.type === "image/svg+xml") {
+      // Rasterize SVG to PNG for vision model compatibility
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || 1024;
+        canvas.height = img.naturalHeight || 768;
+        const ctx = canvas.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob((blob) => {
+          URL.revokeObjectURL(url);
+          if (blob) {
+            const pngFile = new File([blob], file.name.replace(/\.svg$/i, ".png"), { type: "image/png" });
+            setImageFile(pngFile);
+            setImageUrl(URL.createObjectURL(pngFile));
+            setStatus("SVG converted to PNG. Click Generate to analyze.");
+          }
+        }, "image/png");
+      };
+      img.src = url;
+    } else {
+      setImageFile(file);
+      setImageUrl(URL.createObjectURL(file));
+      setStatus("Image loaded. Click Generate to analyze.");
+    }
   }, []);
 
   const handleGenerate = useCallback(() => {
@@ -110,6 +140,8 @@ function App() {
         onToggleGrid={() => setShowGrid((g) => !g)}
         theme={theme}
         onToggleTheme={toggleTheme}
+        llmProvider={llmProvider}
+        onProviderChange={setLlmProvider}
       />
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Collapsible palette */}
@@ -148,6 +180,7 @@ function App() {
           onSelect={setSelectedId}
           onMoveComponent={moveComponent}
           onAddWire={addWire}
+          onSetSheet={setSheet}
           mode={mode}
           showGrid={showGrid}
         />
@@ -165,7 +198,7 @@ function App() {
             />
           </div>
           <AscPreview ascText={ascText} validation={validation} />
-          <ScreenshotPanel imageUrl={imageUrl} />
+          <ScreenshotPanel imageUrl={imageUrl} onUpload={handleUpload} />
         </div>
       </div>
 
@@ -186,19 +219,11 @@ function App() {
         <GenerateWizard
           imageFile={imageFile}
           dictionary={dictionary}
-          onAddComponent={(type, name, value, pos, value2) => {
-            addComponent(type, name, value, pos);
-            if (value2) {
-              // value2 is stored on the component; update after add
-              // (addComponent doesn't currently accept value2, but component supports it)
-              setStatus(`Placed ${name} (${type})`);
-            }
-          }}
-          onAddWire={addWire}
-          onAddFlag={addFlag}
-          onAddText={(content, _pos) => {
-            setStatus(`Added directive: ${content}`);
-          }}
+          llmProvider={llmProvider}
+          onSetSheet={setSheet}
+          onAddComponentsBatch={addComponentsBatch}
+          onAddWiresBatch={addWiresBatch}
+          onAddFlagsBatch={addFlagsBatch}
           onClose={() => {
             setWizardOpen(false);
             setStatus("Wizard closed.");

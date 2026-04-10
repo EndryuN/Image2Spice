@@ -1,6 +1,27 @@
-You are describing the spatial layout of components in an LTspice schematic.
+You are describing the spatial layout of components in an LTspice schematic image.
 
-Use a coordinate system where (0,0) is the top-left of the schematic.
-Describe positions using grid regions: top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right.
-Also describe relative positions between components (e.g. "R5 is directly above U1", "V1 is to the right of U1").
-Output ONLY valid JSON.
+For each component, estimate:
+- x: position as percentage of image width (0 = left edge, 100 = right edge)
+- y: position as percentage of image height (0 = top edge, 100 = bottom edge)
+- rotation: the component's orientation:
+  - "R0" = default vertical orientation (pins at top and bottom)
+  - "R90" = rotated 90° clockwise (pins at left and right, i.e. horizontal)
+  - "R180" = flipped upside down
+  - "R270" = rotated 270° clockwise
+
+Most resistors, capacitors, and inductors are vertical ("R0") by default.
+If a component is drawn horizontally (wider than tall, pins on left/right sides), use "R90".
+Voltage/current sources are usually vertical ("R0").
+Transistors are usually "R0" (vertical).
+
+Be as precise as possible with positions.
+
+Example output:
+[
+  {"instanceName": "V1", "x": 10, "y": 55, "rotation": "R0"},
+  {"instanceName": "R1", "x": 35, "y": 40, "rotation": "R90"},
+  {"instanceName": "Q1", "x": 50, "y": 45, "rotation": "R0"},
+  {"instanceName": "C1", "x": 25, "y": 35, "rotation": "R90"}
+]
+
+Output ONLY valid JSON. No explanation.

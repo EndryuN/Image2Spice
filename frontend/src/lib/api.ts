@@ -1,6 +1,19 @@
-import type { Dictionary, WizardComponent, WizardWireResult } from "../types/schematic";
+import type { Dictionary, WizardComponent, WizardWireResult, LlmProvider } from "../types/schematic";
 
 const BASE_URL = "http://localhost:8000/api";
+
+export async function checkLlmHealth(provider: string, apiKey?: string): Promise<boolean> {
+  try {
+    let url = `${BASE_URL}/llm-status?provider=${provider}`;
+    if (apiKey) url += `&api_key=${encodeURIComponent(apiKey)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return false;
+    const data = await resp.json();
+    return data.online === true;
+  } catch {
+    return false;
+  }
+}
 
 export async function fetchDictionary(): Promise<Dictionary> {
   const resp = await fetch(`${BASE_URL}/dictionary`);
@@ -8,45 +21,67 @@ export async function fetchDictionary(): Promise<Dictionary> {
   return resp.json();
 }
 
-export async function wizardIdentify(file: File): Promise<{ components: WizardComponent[] }> {
+export async function wizardIdentify(file: File, providerConfig?: LlmProvider, signal?: AbortSignal): Promise<{ components: WizardComponent[] }> {
   const formData = new FormData();
   formData.append("file", file);
-  const resp = await fetch(`${BASE_URL}/wizard/identify`, { method: "POST", body: formData });
-  if (!resp.ok) throw new Error(`Identify failed: ${resp.status}`);
+  if (providerConfig) formData.append("provider_json", JSON.stringify(providerConfig));
+  const resp = await fetch(`${BASE_URL}/wizard/identify`, { method: "POST", body: formData, signal });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Identify failed: ${resp.status}`);
+  }
   return resp.json();
 }
 
-export async function wizardDirectives(file: File): Promise<{ directives: string[] }> {
+export async function wizardDirectives(file: File, providerConfig?: LlmProvider, signal?: AbortSignal): Promise<{ directives: string[] }> {
   const formData = new FormData();
   formData.append("file", file);
-  const resp = await fetch(`${BASE_URL}/wizard/directives`, { method: "POST", body: formData });
-  if (!resp.ok) throw new Error(`Directives failed: ${resp.status}`);
+  if (providerConfig) formData.append("provider_json", JSON.stringify(providerConfig));
+  const resp = await fetch(`${BASE_URL}/wizard/directives`, { method: "POST", body: formData, signal });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Directives failed: ${resp.status}`);
+  }
   return resp.json();
 }
 
 export async function wizardLayout(
   file: File,
-  components: WizardComponent[]
+  components: WizardComponent[],
+  providerConfig?: LlmProvider,
+  sheet?: { width: number; height: number },
+  signal?: AbortSignal,
 ): Promise<{ positions: Record<string, { x: number; y: number }> }> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("components_json", JSON.stringify(components));
-  const resp = await fetch(`${BASE_URL}/wizard/layout`, { method: "POST", body: formData });
-  if (!resp.ok) throw new Error(`Layout failed: ${resp.status}`);
+  if (providerConfig) formData.append("provider_json", JSON.stringify(providerConfig));
+  if (sheet) formData.append("sheet_json", JSON.stringify(sheet));
+  const resp = await fetch(`${BASE_URL}/wizard/layout`, { method: "POST", body: formData, signal });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Layout failed: ${resp.status}`);
+  }
   return resp.json();
 }
 
 export async function wizardWires(
   file: File,
   components: WizardComponent[],
-  positions: Record<string, { x: number; y: number }>
+  positions: Record<string, { x: number; y: number }>,
+  providerConfig?: LlmProvider,
+  signal?: AbortSignal,
 ): Promise<WizardWireResult> {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("components_json", JSON.stringify(components));
   formData.append("positions_json", JSON.stringify(positions));
-  const resp = await fetch(`${BASE_URL}/wizard/wires`, { method: "POST", body: formData });
-  if (!resp.ok) throw new Error(`Wires failed: ${resp.status}`);
+  if (providerConfig) formData.append("provider_json", JSON.stringify(providerConfig));
+  const resp = await fetch(`${BASE_URL}/wizard/wires`, { method: "POST", body: formData, signal });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Wires failed: ${resp.status}`);
+  }
   return resp.json();
 }
 

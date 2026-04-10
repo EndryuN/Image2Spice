@@ -1,9 +1,26 @@
-You are tracing wire connections in an LTspice schematic.
+You are tracing wire connections in an LTspice schematic image.
 
-Wires in LTspice are straight blue lines (horizontal or vertical) that connect component pins. Wires meet at junctions (small blue dots/squares).
+Carefully follow every wire (straight blue line, horizontal or vertical) from one component pin to another. Include ALL connections — do not skip any.
 
-Ground connections appear as small downward-pointing triangles labeled "0".
-Net labels are text labels at wire endpoints (like "OUT", "VP", "VN").
+Use these exact pin names:
+- Resistor, Capacitor, Inductor: "A" (top/left pin), "B" (bottom/right pin)
+- Voltage/Current Source: "+" (positive, top), "-" (negative, bottom)
+- Diode, Zener: "+" (anode), "-" (cathode)
+- NPN: "C" (collector, top), "B" (base, left), "E" (emitter, bottom)
+- PNP: "C" (collector, bottom), "B" (base, left), "E" (emitter, top)
+- NMOS/PMOS: "D" (drain), "G" (gate), "S" (source)
+- Op-Amp (3-pin): "invin" (inverting), "noninvin" (non-inverting), "out" (output)
+- Op-Amp 2-supply (5-pin): "In+" (non-inverting), "In-" (inverting), "V+", "V-", "OUT"
 
-Describe connections in terms of component pins, not coordinates.
-Output ONLY valid JSON.
+Ground connections: downward-pointing triangles or the text "0".
+Net labels: text at wire endpoints like "VCC", "OUT", "Vout".
+
+Junction dots (filled squares) = true electrical connection at wire crossings.
+Crossing lines without dots = NOT connected.
+
+Rules:
+- Every wire must be accounted for
+- If a wire connects to a junction that branches to multiple components, list each connection separately
+- If multiple components share a common node (e.g. VCC rail), list each connection to that node
+
+Output ONLY valid JSON. No explanation.

@@ -1,10 +1,24 @@
 import json
+import logging
 import re
 from pathlib import Path
 
-from services.ollama_client import chat_with_vision
+from services.llm_client import chat_with_vision
+from services.schemas import (
+    IdentifyResponse,
+    DirectivesResponse,
+    LayoutResponse,
+    WiresResponse,
+)
 
-VISION_MODEL = "qwen3-vl:8b"
+logger = logging.getLogger(__name__)
+
+VISION_MODELS = {
+    "local": "qwen3-vl:8b",
+    "openrouter": "google/gemma-4-31b-it:free",
+    "openai": "gpt-4o",
+    "claude": "claude-sonnet-4-20250514",
+}
 PROMPTS_DIR = Path(__file__).parent.parent / "prompts"
 
 
@@ -13,7 +27,10 @@ def _load_prompt(filename: str) -> str:
 
 
 def _extract_json(text: str) -> dict | list:
-    """Extract JSON from model response, handling markdown code fences."""
+    """Extract JSON from model response, handling markdown code fences and think tags."""
+    # Strip <think>...</think> blocks (qwen3 models include reasoning)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
     match = re.search(r"```(?:json)?\s*\n?(.*?)```", text, re.DOTALL)
     if match:
         return json.loads(match.group(1).strip())
@@ -30,7 +47,12 @@ def _extract_json(text: str) -> dict | list:
     raise ValueError(f"Could not extract JSON from response: {text[:200]}")
 
 
-async def identify_components(image_bytes: bytes) -> list[dict]:
+async def identify_components(
+    image_bytes: bytes,
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> list[dict]:
     """Step 2: Identify components in the image."""
     system = _load_prompt("identify_system.txt")
     user = (
@@ -41,14 +63,20 @@ async def identify_components(image_bytes: bytes) -> list[dict]:
         "- value2 (only for voltage sources with a second value, otherwise omit)\n\n"
         'Output as JSON array:\n[{"type": "res", "instanceName": "R1", "value": "1k"}, ...]'
     )
-    response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
-    result = _extract_json(response)
-    if isinstance(result, list):
-        return result
-    return result.get("components", [])
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
+    raw = _extract_json(response)
+    items = raw if isinstance(raw, list) else raw.get("components", [])
+    parsed = IdentifyResponse.model_validate({"components": items})
+    return [c.model_dump() for c in parsed.components]
 
 
-async def read_directives(image_bytes: bytes) -> list[str]:
+async def read_directives(
+    image_bytes: bytes,
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> list[str]:
     """Step 3: Read SPICE directives from the image."""
     system = _load_prompt("directives_system.txt")
     user = (
@@ -56,33 +84,51 @@ async def read_directives(image_bytes: bytes) -> list[str]:
         'Output as a JSON array of strings:\n'
         '[".param RINP=1k PSV=15", ".tran 0.005"]'
     )
-    response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
-    result = _extract_json(response)
-    if isinstance(result, list):
-        return result
-    return result.get("directives", [])
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
+    raw = _extract_json(response)
+    items = raw if isinstance(raw, list) else raw.get("directives", [])
+    parsed = DirectivesResponse.model_validate({"directives": items})
+    return parsed.directives
 
 
-async def describe_layout(image_bytes: bytes, components: list[dict]) -> list[dict]:
+async def describe_layout(
+    image_bytes: bytes,
+    components: list[dict],
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> list[dict]:
     """Step 4: Describe spatial layout."""
     system = _load_prompt("layout_system.txt")
     comp_list = ", ".join(f"{c['instanceName']} ({c['type']})" for c in components)
     user = (
         f"These components were identified in the schematic:\n{comp_list}\n\n"
-        "For each component, describe:\n"
-        "- region: which area (top-left, top-center, top-right, center-left, center, center-right, bottom-left, bottom-center, bottom-right)\n"
-        "- nearby: which other components are adjacent and in which direction\n\n"
+        "For each component, estimate:\n"
+        "- x: position as % of image width (0=left, 100=right)\n"
+        "- y: position as % of image height (0=top, 100=bottom)\n"
+        "- rotation: R0=vertical (default), R90=horizontal, R180=flipped, R270=rotated 270°\n\n"
+        "Look carefully at each component's orientation. "
+        "If it's drawn horizontally (pins on left and right), use R90.\n\n"
         'Output as JSON array:\n'
-        '[{"instanceName": "U1", "region": "center", "nearby": [{"name": "R5", "direction": "above"}]}, ...]'
+        '[{"instanceName": "U1", "x": 50, "y": 45, "rotation": "R0"}, ...]'
     )
-    response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
-    result = _extract_json(response)
-    if isinstance(result, list):
-        return result
-    return result.get("layout", [])
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
+    raw = _extract_json(response)
+    items = raw if isinstance(raw, list) else raw.get("layout", [])
+    parsed = LayoutResponse.model_validate({"layout": items})
+    return [item.model_dump() for item in parsed.layout]
 
 
-async def describe_wires(image_bytes: bytes, components: list[dict], pin_info: dict) -> dict:
+async def describe_wires(
+    image_bytes: bytes,
+    components: list[dict],
+    pin_info: dict,
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
     """Step 5: Describe wire connections."""
     system = _load_prompt("wires_system.txt")
     comp_lines = []
@@ -93,17 +139,26 @@ async def describe_wires(image_bytes: bytes, components: list[dict], pin_info: d
     comp_text = "\n".join(comp_lines)
     user = (
         f"These components are in the schematic:\n{comp_text}\n\n"
-        "Describe every wire connection:\n"
-        "- Which component pin connects to which other component pin\n"
-        "- Any ground connections (which pin connects to ground)\n"
-        "- Any net labels (which pin has a label and what is it)\n\n"
+        "Trace EVERY wire in the schematic carefully. For each wire:\n"
+        "1. Follow it from one component pin to another component pin\n"
+        "2. Use the EXACT pin names listed above for each component\n"
+        "3. Note ground symbols (downward triangles) as ground connections\n"
+        "4. Note any net labels (like VCC, OUT) at wire endpoints\n\n"
+        "Be thorough — include ALL connections visible in the image.\n\n"
         'Output as JSON:\n'
-        '{"connections": [{"from": {"component": "R5", "pin": "2"}, "to": {"component": "U1", "pin": "In-"}}], '
-        '"grounds": [{"component": "V3", "pin": "-"}], '
-        '"labels": [{"component": "U1", "pin": "OUT", "label": "OUT"}]}'
+        '{"connections": [{"from": {"component": "R1", "pin": "B"}, "to": {"component": "Q1", "pin": "B"}}], '
+        '"grounds": [{"component": "V1", "pin": "-"}], '
+        '"labels": [{"component": "R3", "pin": "A", "label": "VCC"}]}'
     )
-    response = await chat_with_vision(VISION_MODEL, system, user, image_bytes)
-    result = _extract_json(response)
-    if isinstance(result, dict):
-        return result
-    return {"connections": [], "grounds": [], "labels": []}
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
+    logger.info("Wire VLM raw response: %s", response[:1000])
+    raw = _extract_json(response)
+    logger.info("Wire parsed: %d connections, %d grounds, %d labels",
+                len(raw.get("connections", [])) if isinstance(raw, dict) else 0,
+                len(raw.get("grounds", [])) if isinstance(raw, dict) else 0,
+                len(raw.get("labels", [])) if isinstance(raw, dict) else 0)
+    if not isinstance(raw, dict):
+        raw = {"connections": [], "grounds": [], "labels": []}
+    parsed = WiresResponse.model_validate(raw)
+    return parsed.model_dump(by_alias=True)
