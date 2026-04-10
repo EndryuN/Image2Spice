@@ -16,5 +16,22 @@ Component types you may see:
 - Diode (diode): triangle with bar
 - Zener Diode (zener): triangle with bent bar ends
 
+IMPORTANT: Every component MUST have a non-empty "value" field.
+- If the value is clearly visible on the schematic, use that exact value.
+- If the value is NOT visible or illegible, use a reasonable default:
+  - Resistors: "1k"
+  - Capacitors: "1u"
+  - Inductors: "1m"
+  - Voltage sources: "5"
+  - Current sources: "1m"
+  - NPN transistors: "2N2222"
+  - PNP transistors: "2N2907"
+  - Op-Amps: "UniversalOpamp2"
+  - NMOS: "2N7002"
+  - PMOS: "BSS84"
+  - Diodes: "1N4148"
+  - Zener diodes: "1N4733A"
+- NEVER return an empty string "" for the value field.
+
 List ONLY the components. Do NOT describe wires, positions, or connections.
 Output ONLY valid JSON.

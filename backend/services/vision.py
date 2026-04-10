@@ -59,7 +59,7 @@ async def identify_components(
         "List every component in this schematic. For each, provide:\n"
         "- type (one of: res, cap, ind, voltage, current, opamp2, opamp, npn, pnp, nmos, pmos, diode, zener)\n"
         "- instanceName (the label, e.g. R1, U1, V3)\n"
-        "- value (the displayed value)\n"
+        "- value (REQUIRED, must never be empty — use the displayed value, or a sensible default if not visible)\n"
         "- value2 (only for voltage sources with a second value, otherwise omit)\n\n"
         'Output as JSON array:\n[{"type": "res", "instanceName": "R1", "value": "1k"}, ...]'
     )
@@ -104,14 +104,14 @@ async def describe_layout(
     comp_list = ", ".join(f"{c['instanceName']} ({c['type']})" for c in components)
     user = (
         f"These components were identified in the schematic:\n{comp_list}\n\n"
-        "For each component, estimate:\n"
-        "- x: position as % of image width (0=left, 100=right)\n"
-        "- y: position as % of image height (0=top, 100=bottom)\n"
-        "- rotation: R0=vertical (default), R90=horizontal, R180=flipped, R270=rotated 270°\n\n"
-        "Look carefully at each component's orientation. "
-        "If it's drawn horizontally (pins on left and right), use R90.\n\n"
+        "Place each component on a grid:\n"
+        "- row: horizontal row number (1=top, 2=next, etc.)\n"
+        "- col: column position within row (1=leftmost, 2=next, etc.)\n"
+        "- orientation: 'vertical' (pins top/bottom, default) or 'horizontal' (pins left/right)\n\n"
+        "Group components on the same horizontal level into the same row.\n"
+        "Number columns left to right within each row.\n\n"
         'Output as JSON array:\n'
-        '[{"instanceName": "U1", "x": 50, "y": 45, "rotation": "R0"}, ...]'
+        '[{"instanceName": "Q1", "row": 1, "col": 1, "orientation": "vertical"}, ...]'
     )
     vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
     response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
@@ -131,23 +131,22 @@ async def describe_wires(
 ) -> dict:
     """Step 5: Describe wire connections."""
     system = _load_prompt("wires_system.txt")
-    comp_lines = []
-    for c in components:
-        pins = pin_info.get(c["type"], [])
-        pin_names = ", ".join(p["name"] for p in pins)
-        comp_lines.append(f"- {c['instanceName']} ({c['type']}): pins [{pin_names}]")
-    comp_text = "\n".join(comp_lines)
+    comp_names = ", ".join(c["instanceName"] for c in components)
     user = (
-        f"These components are in the schematic:\n{comp_text}\n\n"
-        "Trace EVERY wire in the schematic carefully. For each wire:\n"
-        "1. Follow it from one component pin to another component pin\n"
-        "2. Use the EXACT pin names listed above for each component\n"
-        "3. Note ground symbols (downward triangles) as ground connections\n"
-        "4. Note any net labels (like VCC, OUT) at wire endpoints\n\n"
-        "Be thorough — include ALL connections visible in the image.\n\n"
-        'Output as JSON:\n'
-        '{"connections": [{"from": {"component": "R1", "pin": "B"}, "to": {"component": "Q1", "pin": "B"}}], '
-        '"grounds": [{"component": "V1", "pin": "-"}], '
+        f"Components in this schematic: {comp_names}\n\n"
+        "List EVERY wire connection between components. For each wire, say which component pin connects to which.\n\n"
+        "Pin names:\n"
+        "- 2-pin (R, C, L, diode): A (pin 1/top/left), B (pin 2/bottom/right)\n"
+        "- Sources (V, I): + (positive), - (negative)\n"
+        "- NPN/PNP: C (collector), B (base), E (emitter)\n"
+        "- MOSFET: D (drain), G (gate), S (source)\n\n"
+        "Also list:\n"
+        "- Ground connections (triangles or '0' symbol)\n"
+        "- Net labels (VCC, OUT, etc.)\n\n"
+        "Include ALL connections. Don't skip any wires.\n\n"
+        'Output JSON:\n'
+        '{"connections": [{"from": {"component": "R1", "pin": "B"}, "to": {"component": "Q1", "pin": "C"}}], '
+        '"grounds": [{"component": "R5", "pin": "B"}], '
         '"labels": [{"component": "R3", "pin": "A", "label": "VCC"}]}'
     )
     vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
@@ -162,3 +161,138 @@ async def describe_wires(
         raw = {"connections": [], "grounds": [], "labels": []}
     parsed = WiresResponse.model_validate(raw)
     return parsed.model_dump(by_alias=True)
+
+
+async def analyze_schematic(
+    image_bytes: bytes,
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    """Single-shot: extract components, connections, grounds, labels from schematic image."""
+    system = _load_prompt("generate_asc_system.txt")
+    user = (
+        "Analyze this circuit schematic image carefully.\n\n"
+        "First, count the total number of components you see.\n"
+        "Then list ALL of them with exact values, positions, and orientations.\n"
+        "Then trace every wire connection between component pins.\n"
+        "Then list all ground symbols and net labels.\n\n"
+        "Be thorough — every component and every wire matters.\n\n"
+        "Output ONLY valid JSON."
+    )
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
+    logger.info("Analyze VLM response (%d chars): %s...", len(response), response[:200])
+    raw = _extract_json(response)
+    if not isinstance(raw, dict):
+        raise ValueError(f"Expected JSON object, got: {type(raw)}")
+    return raw
+
+
+async def describe_wire_paths(
+    image_bytes: bytes,
+    components: list[dict],
+    connections: list[dict],
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> list[dict]:
+    """Describe how each wire is routed in the image — straight, L-shaped, bus, etc."""
+    comp_names = ", ".join(c.get("name", "") for c in components)
+    conn_summary = "\n".join(
+        f"  {c.get('from', '')} -> {c.get('to', '')}" for c in connections[:20]
+    )
+
+    system = (
+        "You are analyzing wire routing in a circuit schematic image.\n\n"
+        "For each wire path visible in the image, describe:\n"
+        "- from_pin: which component pin it starts at (e.g. 'V1.+')\n"
+        "- to_pin: which component pin it ends at (e.g. 'R1.A')\n"
+        "- path: how the wire is routed. One of:\n"
+        "  - 'direct_vertical': straight vertical wire (components share same X column)\n"
+        "  - 'direct_horizontal': straight horizontal wire (components share same Y row)\n"
+        "  - 'L_horizontal_first': L-shaped, goes horizontal then vertical\n"
+        "  - 'L_vertical_first': L-shaped, goes vertical then horizontal\n"
+        "  - 'bus_horizontal': part of a horizontal bus running across multiple components\n"
+        "  - 'bus_vertical': part of a vertical bus\n"
+        "- bus_y or bus_x: if bus routing, the approximate Y% (for horizontal) or X% (for vertical) "
+        "where the bus runs (0=top/left, 100=bottom/right)\n\n"
+        "Also identify buses: if multiple wires share the same horizontal or vertical line, "
+        "group them as a bus.\n\n"
+        "Output ONLY valid JSON."
+    )
+
+    user = (
+        f"Components in this schematic: {comp_names}\n\n"
+        f"Known connections:\n{conn_summary}\n\n"
+        "Look at the image and describe HOW each wire is routed.\n"
+        "Pay attention to:\n"
+        "- Components in the same column connected by straight vertical wires\n"
+        "- Horizontal bus lines running across the top or bottom\n"
+        "- L-shaped wires that go horizontal then vertical (or vice versa)\n\n"
+        "Also list any buses (horizontal or vertical lines shared by multiple connections):\n"
+        '{"wire_paths": [...], "buses": [{"orientation": "horizontal", "y_pct": 10, '
+        '"connects": ["V1.+", "R2.A", "V2.-"]}]}\n\n'
+        "Output ONLY valid JSON."
+    )
+
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
+    logger.info("Wire path VLM response (%d chars): %s...", len(response), response[:200])
+    raw = _extract_json(response)
+    if isinstance(raw, dict):
+        return raw.get("wire_paths", []), raw.get("buses", [])
+    return [], []
+
+
+async def validate_and_fix(
+    image_bytes: bytes,
+    first_pass: dict,
+    issues: dict,
+    provider: str = "local",
+    api_key: str | None = None,
+    model: str | None = None,
+) -> dict:
+    """Second pass: send first-pass results + issues back to VLM for correction."""
+    components = first_pass.get("components", [])
+    connections = first_pass.get("connections", [])
+    comp_names = [c.get("name", "") for c in components]
+
+    unconnected = issues.get("unconnected_pins", [])
+    unconnected_str = ", ".join(f"{c}.{p}" for c, p in unconnected)
+
+    system = (
+        "You are validating a circuit schematic analysis. The first pass may have "
+        "missed connections or gotten polarities wrong.\n\n"
+        "CRITICAL rules for voltage sources:\n"
+        "- The LONGER line is the POSITIVE (+) terminal\n"
+        "- The SHORTER line is the NEGATIVE (-) terminal\n"
+        "- Look carefully at each voltage source to determine which end is + and -\n\n"
+        "For every component, EVERY pin must be connected to something.\n"
+        "A circuit must be closed — current must have a complete path.\n\n"
+        "Output ONLY valid JSON with the complete corrected analysis."
+    )
+
+    user = (
+        f"First pass found these components: {', '.join(comp_names)}\n\n"
+        f"First pass connections:\n{json.dumps(connections, indent=2)}\n\n"
+    )
+    if unconnected:
+        user += f"PROBLEM: These pins are NOT connected to anything: {unconnected_str}\n"
+        user += "Every pin must be connected. Add the missing connections.\n\n"
+    user += (
+        "Look at the image again carefully and output the COMPLETE corrected analysis.\n"
+        "Pay special attention to:\n"
+        "1. Which terminal is + and which is - on each voltage source (longer line = +)\n"
+        "2. Every pin must be connected — trace every wire\n"
+        "3. The circuit must be closed (complete current paths)\n\n"
+        "Output the full JSON with components, connections, grounds, and labels."
+    )
+
+    vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
+    response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
+    logger.info("Validate VLM response (%d chars): %s...", len(response), response[:200])
+    raw = _extract_json(response)
+    if not isinstance(raw, dict):
+        raise ValueError(f"Expected JSON object from validation pass, got: {type(raw)}")
+    return raw

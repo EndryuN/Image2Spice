@@ -187,15 +187,15 @@ class CircuitGraph:
                         queue.append(neighbor)
 
         # Assign component tiers from their net tiers
-        # Sources use min (placed at driving side), passives use max (placed at load side)
+        # All components use min — parallel components sharing the same two
+        # nets end up on the same tier (correct for ground-truth circuit 04).
+        # Series components naturally get different tiers because their nets
+        # have different BFS distances.
         for name, node in self.components.items():
             net_a, net_b = comp_pin_nets.get(name, (None, None))
             tier_a = net_tiers.get(net_a, 0) if net_a else 0
             tier_b = net_tiers.get(net_b, 0) if net_b else 0
-            if node.type in ("voltage", "current"):
-                node.tier = min(tier_a, tier_b)
-            else:
-                node.tier = max(tier_a, tier_b)
+            node.tier = min(tier_a, tier_b)
 
         # Build tier list
         tier_map: dict[int, list[str]] = {}
@@ -228,3 +228,26 @@ class CircuitGraph:
                 node.resolved_rotation = "R0"
             else:
                 node.resolved_rotation = "R180"
+
+    def validate(self) -> dict:
+        """Check circuit for issues: unconnected pins, missing connections.
+
+        Returns dict with:
+          unconnected_pins: list of (comp_name, pin_name) not on any net
+          component_count: int
+          net_count: int
+          all_connected: bool (every component has all pins in some net)
+        """
+        unconnected: list[tuple[str, str]] = []
+        for name, node in self.components.items():
+            for pin_def in node.pins:
+                key = (name, pin_def["name"])
+                if key not in self._pin_net or self._pin_net[key].startswith("_virtual_"):
+                    unconnected.append(key)
+
+        return {
+            "unconnected_pins": unconnected,
+            "component_count": len(self.components),
+            "net_count": len(self.nets),
+            "all_connected": len(unconnected) == 0,
+        }

@@ -5,7 +5,10 @@ import type { LlmProvider } from "../types/schematic";
 interface ToolbarProps {
   onUpload: (file: File) => void;
   onGenerate: () => void;
+  onRedrawWires: () => void;
+  canRedraw: boolean;
   onExport: () => void;
+  onClear: () => void;
   onUndo: () => void;
   onRedo: () => void;
   canUndo: boolean;
@@ -23,7 +26,10 @@ interface ToolbarProps {
 export function Toolbar({
   onUpload,
   onGenerate,
+  onRedrawWires,
+  canRedraw,
   onExport,
+  onClear,
   onUndo,
   onRedo,
   canUndo,
@@ -55,7 +61,7 @@ export function Toolbar({
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.asc"
         style={{ display: "none" }}
         onChange={(e) => {
           const file = e.target.files?.[0];
@@ -66,7 +72,11 @@ export function Toolbar({
       <button onClick={onGenerate} disabled={!imageLoaded || generating}>
         {generating ? "Generating..." : "Generate"}
       </button>
+      <button onClick={onRedrawWires} disabled={!canRedraw} title="Re-route wires using current component positions">
+        Redraw Wires
+      </button>
       <button onClick={onExport}>Export .asc</button>
+      <button onClick={onClear}>Clear</button>
       <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
       <button onClick={onUndo} disabled={!canUndo}>Undo</button>
       <button onClick={onRedo} disabled={!canRedo}>Redo</button>

@@ -1,16 +1,17 @@
-import { useRef, useState, useCallback, useEffect } from "react";
+import { useRef, useState, useCallback, useEffect, useMemo } from "react";
 import type {
   Schematic,
   Component,
   Dictionary,
   Position,
 } from "../types/schematic";
+import { snapToGrid } from "../lib/gridSnap";
 
 interface EditorProps {
   schematic: Schematic;
   dictionary: Dictionary | null;
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  selectedIds: Set<string>;
+  onSelect: (ids: Set<string>) => void;
   onMoveComponent: (id: string, pos: Position) => void;
   onAddWire: (from: Position, to: Position) => void;
   onSetSheet: (width: number, height: number) => void;
@@ -18,10 +19,12 @@ interface EditorProps {
   showGrid: boolean;
 }
 
+const PIN_SNAP_RADIUS = 20;
+
 export function Editor({
   schematic,
   dictionary,
-  selectedId,
+  selectedIds,
   onSelect,
   onMoveComponent,
   onAddWire,
@@ -36,14 +39,121 @@ export function Editor({
     offsetX: number;
     offsetY: number;
   } | null>(null);
+
+  // Wire drawing state machine: null → "first" → "second" → null
+  const [wirePhase, setWirePhase] = useState<"first" | "second" | null>(null);
   const [wireStart, setWireStart] = useState<Position | null>(null);
-  const [wirePreview, setWirePreview] = useState<Position | null>(null);
+  const [wireCorner, setWireCorner] = useState<Position | null>(null);
+  const [cursorPos, setCursorPos] = useState<Position | null>(null);
+
+  const [marquee, setMarquee] = useState<{ start: Position; end: Position } | null>(null);
+  const marqueeRef = useRef<{ start: Position; end: Position } | null>(null);
   const [panning, setPanning] = useState<{
     startX: number;
     startY: number;
     startVX: number;
     startVY: number;
   } | null>(null);
+
+  // ── Compute absolute pin positions for all components ──────────────
+  const allPins = useMemo(() => {
+    if (!dictionary) return [];
+    const pins: { x: number; y: number; comp: string; pin: string }[] = [];
+    for (const comp of schematic.components) {
+      const dictComp = dictionary.components[comp.type];
+      if (!dictComp) continue;
+      const w = dictComp.symbol.width;
+      const h = dictComp.symbol.height;
+      // Bounds offset: convert LTspice pin coords to SVG coords
+      // Bounds may be {minX,minY,...} or [minX,minY,maxX,maxY]
+      const rawBounds = dictComp.geometry?.bounds;
+      let bx = 0, by = 0;
+      if (Array.isArray(rawBounds)) {
+        bx = rawBounds[0] ?? 0;
+        by = rawBounds[1] ?? 0;
+      } else if (rawBounds) {
+        bx = (rawBounds as { minX: number }).minX ?? 0;
+        by = (rawBounds as { minY: number }).minY ?? 0;
+      }
+      for (const pin of dictComp.pins) {
+        // Convert from LTspice coords to SVG coords
+        let px = (pin.x ?? 0) - bx;
+        let py = (pin.y ?? 0) - by;
+        // Apply SVG rotation around center (cx, cy) — must match the
+        // rotate(θ, cx, cy) transform used to render the component path
+        const cx = w / 2;
+        const cy = h / 2;
+        switch (comp.rotation) {
+          case "R90": {
+            const newPx = cx - (py - cy);
+            const newPy = cy + (px - cx);
+            px = newPx; py = newPy; break;
+          }
+          case "R180": {
+            px = 2 * cx - px;
+            py = 2 * cy - py;
+            break;
+          }
+          case "R270": {
+            const newPx = cx + (py - cy);
+            const newPy = cy - (px - cx);
+            px = newPx; py = newPy; break;
+          }
+        }
+        pins.push({
+          x: comp.position.x + px,
+          y: comp.position.y + py,
+          comp: comp.instanceName,
+          pin: pin.name,
+        });
+      }
+    }
+    return pins;
+  }, [schematic.components, dictionary]);
+
+  // ── Find nearest pin to a position ─────────────────────────────────
+  const snapToPin = useCallback(
+    (pos: Position): Position => {
+      let best = pos;
+      let bestDist = PIN_SNAP_RADIUS;
+      for (const pin of allPins) {
+        const dist = Math.abs(pin.x - pos.x) + Math.abs(pin.y - pos.y);
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = { x: pin.x, y: pin.y };
+        }
+      }
+      return best;
+    },
+    [allPins]
+  );
+
+  // ── Snap position: try pin first, then grid ────────────────────────
+  const snapPosition = useCallback(
+    (pos: Position): Position => {
+      const pinSnap = snapToPin(pos);
+      if (pinSnap !== pos) return pinSnap;
+      return { x: snapToGrid(pos.x), y: snapToGrid(pos.y) };
+    },
+    [snapToPin]
+  );
+
+  // ── Compute L-shape corner from start and cursor ───────────────────
+  const computeCorner = useCallback(
+    (start: Position, cursor: Position): Position => {
+      // Auto-detect: if moved more horizontally, go horizontal first
+      const dx = Math.abs(cursor.x - start.x);
+      const dy = Math.abs(cursor.y - start.y);
+      if (dx >= dy) {
+        // Horizontal first → corner at (cursor.x, start.y)
+        return { x: cursor.x, y: start.y };
+      } else {
+        // Vertical first → corner at (start.x, cursor.y)
+        return { x: start.x, y: cursor.y };
+      }
+    },
+    []
+  );
 
   function getRotationTransform(rotation: string, width: number, height: number): string {
     const cx = width / 2;
@@ -72,6 +182,7 @@ export function Editor({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      // Middle-click pan
       if (e.button === 1) {
         setPanning({
           startX: e.clientX,
@@ -82,23 +193,49 @@ export function Editor({
         e.preventDefault();
         return;
       }
+
       if (mode === "wire" && e.button === 0) {
-        const pos = svgPoint(e.clientX, e.clientY);
-        if (!wireStart) {
+        const raw = svgPoint(e.clientX, e.clientY);
+        const pos = snapPosition(raw);
+
+        if (!wirePhase) {
+          // Start drawing
           setWireStart(pos);
-          setWirePreview(pos);
-        } else {
-          onAddWire(wireStart, pos);
+          setWirePhase("first");
+          setCursorPos(pos);
+        } else if (wirePhase === "first" && wireStart) {
+          // Lock the corner, transition to second segment
+          const corner = computeCorner(wireStart, pos);
+          // Place first segment if it has length
+          if (corner.x !== wireStart.x || corner.y !== wireStart.y) {
+            onAddWire(wireStart, corner);
+          }
+          setWireCorner(corner);
+          setWirePhase("second");
+        } else if (wirePhase === "second" && wireCorner) {
+          // Place second segment and finish
+          const endPos = snapPosition(raw);
+          if (endPos.x !== wireCorner.x || endPos.y !== wireCorner.y) {
+            onAddWire(wireCorner, endPos);
+          }
+          // Reset
           setWireStart(null);
-          setWirePreview(null);
+          setWireCorner(null);
+          setWirePhase(null);
+          setCursorPos(null);
         }
         return;
       }
+
       if (mode === "select" && e.button === 0) {
-        onSelect(null);
+        // Start marquee selection — don't clear selection yet, wait for mouseUp
+        const pos = svgPoint(e.clientX, e.clientY);
+        const m = { start: pos, end: pos };
+        setMarquee(m);
+        marqueeRef.current = m;
       }
     },
-    [mode, wireStart, svgPoint, onAddWire, onSelect, viewBox]
+    [mode, wirePhase, wireStart, wireCorner, svgPoint, snapPosition, computeCorner, onAddWire, onSelect, viewBox]
   );
 
   const handleMouseMove = useCallback(
@@ -119,22 +256,66 @@ export function Editor({
       if (dragging) {
         const pos = svgPoint(e.clientX, e.clientY);
         onMoveComponent(dragging.id, {
-          x: pos.x - dragging.offsetX,
-          y: pos.y - dragging.offsetY,
+          x: snapToGrid(pos.x - dragging.offsetX),
+          y: snapToGrid(pos.y - dragging.offsetY),
         });
         return;
       }
-      if (wireStart) {
-        setWirePreview(svgPoint(e.clientX, e.clientY));
+      if (marqueeRef.current) {
+        const pos = svgPoint(e.clientX, e.clientY);
+        const m = { start: marqueeRef.current.start, end: pos };
+        setMarquee(m);
+        marqueeRef.current = m;
+        return;
+      }
+      // Update cursor position for wire preview and pin highlighting
+      if (mode === "wire") {
+        const raw = svgPoint(e.clientX, e.clientY);
+        setCursorPos(snapPosition(raw));
       }
     },
-    [panning, dragging, wireStart, svgPoint, onMoveComponent, viewBox]
+    [panning, dragging, mode, svgPoint, snapPosition, onMoveComponent, viewBox, marquee]
   );
 
   const handleMouseUp = useCallback(() => {
     setDragging(null);
     setPanning(null);
-  }, []);
+    const m = marqueeRef.current;
+    if (m) {
+      const x1 = Math.min(m.start.x, m.end.x);
+      const y1 = Math.min(m.start.y, m.end.y);
+      const x2 = Math.max(m.start.x, m.end.x);
+      const y2 = Math.max(m.start.y, m.end.y);
+      const dragDist = Math.abs(x2 - x1) + Math.abs(y2 - y1);
+
+      if (dragDist > 10) {
+        // Marquee drag — select all wires that intersect the rectangle
+        const ids = new Set<string>();
+        for (const wire of schematic.wires) {
+          const wx1 = Math.min(wire.from.x, wire.to.x);
+          const wy1 = Math.min(wire.from.y, wire.to.y);
+          const wx2 = Math.max(wire.from.x, wire.to.x);
+          const wy2 = Math.max(wire.from.y, wire.to.y);
+          if (wx2 >= x1 && wx1 <= x2 && wy2 >= y1 && wy1 <= y2) {
+            ids.add(wire.id);
+          }
+        }
+        // Also select components inside the rectangle
+        for (const comp of schematic.components) {
+          if (comp.position.x >= x1 && comp.position.x <= x2 &&
+              comp.position.y >= y1 && comp.position.y <= y2) {
+            ids.add(comp.id);
+          }
+        }
+        onSelect(ids);
+      } else {
+        // Just a click on empty space — deselect
+        onSelect(new Set());
+      }
+      setMarquee(null);
+      marqueeRef.current = null;
+    }
+  }, [schematic.wires, schematic.components, onSelect]);
 
   const zoomBy = useCallback(
     (factor: number) => {
@@ -156,8 +337,8 @@ export function Editor({
   const startDrag = useCallback(
     (compId: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      onSelect(compId);
-      if (mode !== "select") return;
+      if (mode === "wire") return; // Don't intercept clicks in wire mode
+      onSelect(new Set([compId]));
       const comp = schematic.components.find((c) => c.id === compId);
       if (!comp) return;
       const pos = svgPoint(e.clientX, e.clientY);
@@ -175,21 +356,86 @@ export function Editor({
     setViewBox({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
   }, [schematic.sheet.width, schematic.sheet.height]);
 
+  // Keyboard: Escape cancels wire, Delete removes selected wire
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setWireStart(null);
-        setWirePreview(null);
-        onSelect(null);
+        setWireCorner(null);
+        setWirePhase(null);
+        setCursorPos(null);
+        setMarquee(null);
+        onSelect(new Set());
       }
+      // Delete/Backspace handled by parent via PropertyPanel
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onSelect]);
+  }, [onSelect, selectedIds, schematic.wires]);
+
+  // Reset wire state when switching away from wire mode
+  useEffect(() => {
+    if (mode !== "wire") {
+      setWireStart(null);
+      setWireCorner(null);
+      setWirePhase(null);
+      setCursorPos(null);
+    }
+  }, [mode]);
+
+  // ── Wire preview lines ─────────────────────────────────────────────
+  const wirePreviewLines = useMemo(() => {
+    if (!wireStart || !cursorPos) return null;
+
+    if (wirePhase === "first") {
+      // L-shaped preview from start to cursor
+      const corner = computeCorner(wireStart, cursorPos);
+      return (
+        <>
+          <line
+            x1={wireStart.x} y1={wireStart.y} x2={corner.x} y2={corner.y}
+            stroke="var(--color-selection)" strokeWidth={2} strokeDasharray="4,4" pointerEvents="none"
+          />
+          <line
+            x1={corner.x} y1={corner.y} x2={cursorPos.x} y2={cursorPos.y}
+            stroke="var(--color-selection)" strokeWidth={2} strokeDasharray="4,4" pointerEvents="none"
+          />
+          <circle cx={corner.x} cy={corner.y} r={3} fill="var(--color-selection)" pointerEvents="none" />
+        </>
+      );
+    }
+
+    if (wirePhase === "second" && wireCorner) {
+      // Straight line from corner to cursor
+      return (
+        <line
+          x1={wireCorner.x} y1={wireCorner.y} x2={cursorPos.x} y2={cursorPos.y}
+          stroke="var(--color-selection)" strokeWidth={2} strokeDasharray="4,4" pointerEvents="none"
+        />
+      );
+    }
+
+    return null;
+  }, [wireStart, wireCorner, wirePhase, cursorPos, computeCorner]);
+
+  // ── Nearest pin highlight ──────────────────────────────────────────
+  const nearestPin = useMemo(() => {
+    if (mode !== "wire" || !cursorPos) return null;
+    let best: { x: number; y: number } | null = null;
+    let bestDist = PIN_SNAP_RADIUS;
+    for (const pin of allPins) {
+      const dist = Math.abs(pin.x - cursorPos.x) + Math.abs(pin.y - cursorPos.y);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { x: pin.x, y: pin.y };
+      }
+    }
+    return best;
+  }, [mode, cursorPos, allPins]);
 
   const renderComponent = (comp: Component) => {
     const dictComp = dictionary?.components[comp.type];
-    const isSelected = comp.id === selectedId;
+    const isSelected = selectedIds.has(comp.id);
     const rotTransform = dictComp
       ? getRotationTransform(comp.rotation, dictComp.symbol.width, dictComp.symbol.height)
       : "";
@@ -198,7 +444,7 @@ export function Editor({
         key={comp.id}
         transform={`translate(${comp.position.x}, ${comp.position.y})`}
         onMouseDown={(e) => startDrag(comp.id, e)}
-        style={{ cursor: mode === "select" ? "grab" : "default" }}
+        style={{ cursor: mode === "select" ? "grab" : "crosshair", pointerEvents: mode === "wire" ? "none" : "auto" }}
       >
         {/* Invisible hit area for easier selection */}
         <rect
@@ -221,24 +467,37 @@ export function Editor({
           ) : (
             <rect width={64} height={32} fill="none" stroke="var(--color-component)" strokeWidth={2} />
           )}
-          {dictComp?.pins.map((pin) => (
-            pin.position ? (
-              <circle key={pin.name} cx={pin.position[0]} cy={pin.position[1]} r={3} fill="var(--color-component)" />
-            ) : null
-          ))}
         </g>
         {(() => {
           const w = dictComp?.symbol.width ?? 64;
           const h = dictComp?.symbol.height ?? 32;
-          const isHoriz = comp.rotation === "R90" || comp.rotation === "R270";
-          // For rotated components, the rendered bounding box swaps width/height
-          const nameX = isHoriz ? h / 2 : w / 2;
+          const isVert = comp.rotation === "R0" || comp.rotation === "R180";
+
+          let nameX: number, nameY: number, valX: number, valY: number;
+          let anchor: "start" | "middle";
+
+          if (isVert) {
+            anchor = "start";
+            nameX = w + 4;
+            nameY = h * 0.35;
+            valX = w + 4;
+            valY = h * 0.7;
+          } else {
+            const visTop = (h - w) / 2;
+            const visBottom = (h + w) / 2;
+            anchor = "middle";
+            nameX = w / 2;
+            nameY = visTop - 6;
+            valX = w / 2;
+            valY = visBottom + 14;
+          }
+
           return (
             <>
-              <text x={nameX} y={isHoriz ? -w / 2 - 4 : -8} textAnchor="middle" fontSize={12} fill="var(--color-component)">
+              <text x={nameX} y={nameY} textAnchor={anchor} dominantBaseline="auto" fontSize={12} fill="var(--color-component)">
                 {comp.instanceName}
               </text>
-              <text x={nameX} y={isHoriz ? h + w / 2 + 2 : h + 14} textAnchor="middle" fontSize={10} fill="var(--color-component)">
+              <text x={valX} y={valY} textAnchor={anchor} dominantBaseline="auto" fontSize={10} fill="var(--color-component)">
                 {comp.value}
               </text>
             </>
@@ -280,38 +539,121 @@ export function Editor({
             fill="url(#grid)"
           />
         )}
-        {schematic.wires.map((wire) => (
-          <line
-            key={wire.id}
-            x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
-            stroke="var(--color-component)" strokeWidth={2}
-            onClick={(e) => { e.stopPropagation(); onSelect(wire.id); }}
-            style={{ cursor: "pointer" }}
+
+        {/* Pin highlights in wire mode */}
+        {mode === "wire" && allPins.map((pin, i) => (
+          <circle
+            key={`pin-${i}`}
+            cx={pin.x} cy={pin.y} r={4}
+            fill="none"
+            stroke="var(--color-accent, #1976d2)"
+            strokeWidth={1.5}
+            opacity={0.6}
+            pointerEvents="none"
           />
         ))}
-        {wireStart && wirePreview && (
-          <line
-            x1={wireStart.x} y1={wireStart.y} x2={wirePreview.x} y2={wirePreview.y}
-            stroke="var(--color-selection)" strokeWidth={1} strokeDasharray="4,4" pointerEvents="none"
+
+        {/* Nearest pin glow */}
+        {nearestPin && (
+          <circle
+            cx={nearestPin.x} cy={nearestPin.y} r={7}
+            fill="var(--color-accent, #1976d2)"
+            opacity={0.3}
+            pointerEvents="none"
           />
         )}
+
+        {/* Wires */}
+        {schematic.wires.map((wire) => {
+          const isWireSelected = selectedIds.has(wire.id);
+          return (
+            <g key={wire.id}>
+              {/* Invisible wide hit area for easier clicking */}
+              <line
+                x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
+                stroke="transparent"
+                strokeWidth={12}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (e.shiftKey) {
+                    const next = new Set(selectedIds);
+                    if (next.has(wire.id)) next.delete(wire.id);
+                    else next.add(wire.id);
+                    onSelect(next);
+                  } else {
+                    onSelect(new Set([wire.id]));
+                  }
+                }}
+                style={{ cursor: "pointer" }}
+              />
+              {/* Visible wire */}
+              <line
+                x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
+                stroke={isWireSelected ? "var(--color-selection)" : "var(--color-component)"}
+                strokeWidth={isWireSelected ? 3 : 2}
+                pointerEvents="none"
+              />
+            </g>
+          );
+        })}
+
+        {/* Marquee selection rectangle */}
+        {marquee && (
+          <rect
+            x={Math.min(marquee.start.x, marquee.end.x)}
+            y={Math.min(marquee.start.y, marquee.end.y)}
+            width={Math.abs(marquee.end.x - marquee.start.x)}
+            height={Math.abs(marquee.end.y - marquee.start.y)}
+            fill="var(--color-selection)"
+            fillOpacity={0.1}
+            stroke="var(--color-selection)"
+            strokeWidth={1}
+            strokeDasharray="4,4"
+            pointerEvents="none"
+          />
+        )}
+
+        {/* Wire preview */}
+        {wirePreviewLines}
+
+        {/* Cursor dot in wire mode */}
+        {mode === "wire" && cursorPos && (
+          <circle
+            cx={cursorPos.x} cy={cursorPos.y} r={3}
+            fill="var(--color-selection)"
+            pointerEvents="none"
+          />
+        )}
+
         {schematic.components.map(renderComponent)}
-        {schematic.flags.map((flag) => (
-          <g key={flag.id} transform={`translate(${flag.position.x}, ${flag.position.y})`}>
+        {schematic.flags.map((flag) => {
+          const isFlagSelected = selectedIds.has(flag.id);
+          return (
+          <g key={flag.id} transform={`translate(${flag.position.x}, ${flag.position.y})`}
+            onClick={(e) => { e.stopPropagation(); onSelect(new Set([flag.id])); }}
+            style={{ cursor: "pointer" }}
+          >
+            {/* Hit area */}
+            <rect x={-15} y={-15} width={30} height={30} fill="transparent" />
+            {isFlagSelected && (
+              <rect x={-12} y={-12} width={24} height={24} fill="none" stroke="var(--color-selection)" strokeWidth={1} strokeDasharray="3,3" />
+            )}
             {flag.name === "0" ? (
               <>
-                <line x1={0} y1={0} x2={0} y2={10} stroke="var(--color-component)" strokeWidth={2} />
-                <line x1={-10} y1={10} x2={10} y2={10} stroke="var(--color-component)" strokeWidth={2} />
-                <line x1={-6} y1={14} x2={6} y2={14} stroke="var(--color-component)" strokeWidth={2} />
-                <line x1={-2} y1={18} x2={2} y2={18} stroke="var(--color-component)" strokeWidth={2} />
+                <line x1={0} y1={0} x2={0} y2={10} stroke={isFlagSelected ? "var(--color-selection)" : "var(--color-component)"} strokeWidth={2} />
+                <line x1={-10} y1={10} x2={10} y2={10} stroke={isFlagSelected ? "var(--color-selection)" : "var(--color-component)"} strokeWidth={2} />
+                <line x1={-6} y1={14} x2={6} y2={14} stroke={isFlagSelected ? "var(--color-selection)" : "var(--color-component)"} strokeWidth={2} />
+                <line x1={-2} y1={18} x2={2} y2={18} stroke={isFlagSelected ? "var(--color-selection)" : "var(--color-component)"} strokeWidth={2} />
               </>
             ) : (
               <>
-                <line x1={0} y1={0} x2={0} y2={-5} stroke="var(--color-component)" strokeWidth={1} />
-                <text x={2} y={-8} fontSize={11} fill="var(--color-component)">{flag.name}</text>
+                <line x1={0} y1={0} x2={0} y2={-5} stroke={isFlagSelected ? "var(--color-selection)" : "var(--color-component)"} strokeWidth={1} />
+                <text x={2} y={-8} fontSize={11} fill={isFlagSelected ? "var(--color-selection)" : "var(--color-component)"}>{flag.name}</text>
               </>
             )}
           </g>
+          );
+        }
         ))}
         {schematic.text.map((t) => (
           <text key={t.id} x={t.position.x} y={t.position.y} fontSize={11} fill="var(--color-text)">

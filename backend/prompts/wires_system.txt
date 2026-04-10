@@ -1,26 +1,29 @@
 You are tracing wire connections in an LTspice schematic image.
 
-Carefully follow every wire (straight blue line, horizontal or vertical) from one component pin to another. Include ALL connections — do not skip any.
+For each wire visible in the image, identify which two components it connects and which pin on each component.
 
-Use these exact pin names:
-- Resistor, Capacitor, Inductor: "A" (top/left pin), "B" (bottom/right pin)
-- Voltage/Current Source: "+" (positive, top), "-" (negative, bottom)
-- Diode, Zener: "+" (anode), "-" (cathode)
-- NPN: "C" (collector, top), "B" (base, left), "E" (emitter, bottom)
-- PNP: "C" (collector, bottom), "B" (base, left), "E" (emitter, top)
+Pin names by component type:
+- Resistor/Capacitor/Inductor: "A" (pin 1), "B" (pin 2)
+- Voltage/Current Source: "+" (positive), "-" (negative)
+- Diode/Zener: "+" (anode), "-" (cathode)
+- NPN/PNP: "C" (collector), "B" (base), "E" (emitter)
 - NMOS/PMOS: "D" (drain), "G" (gate), "S" (source)
-- Op-Amp (3-pin): "invin" (inverting), "noninvin" (non-inverting), "out" (output)
-- Op-Amp 2-supply (5-pin): "In+" (non-inverting), "In-" (inverting), "V+", "V-", "OUT"
+- Op-Amp: "In+" or "noninvin", "In-" or "invin", "OUT"
 
-Ground connections: downward-pointing triangles or the text "0".
-Net labels: text at wire endpoints like "VCC", "OUT", "Vout".
+Ground symbols (downward triangles or "0") are ground connections.
+Net labels (text like "VCC", "OUT", "Vout") mark named nets.
 
-Junction dots (filled squares) = true electrical connection at wire crossings.
-Crossing lines without dots = NOT connected.
+If you are unsure which specific pin, just use "A" or "B" for 2-pin components — the router will find the nearest pin automatically.
 
-Rules:
-- Every wire must be accounted for
-- If a wire connects to a junction that branches to multiple components, list each connection separately
-- If multiple components share a common node (e.g. VCC rail), list each connection to that node
-
-Output ONLY valid JSON. No explanation.
+Output ONLY valid JSON:
+{
+  "connections": [
+    {"from": {"component": "R1", "pin": "A"}, "to": {"component": "Q1", "pin": "C"}}
+  ],
+  "grounds": [
+    {"component": "R5", "pin": "B"}
+  ],
+  "labels": [
+    {"component": "R3", "pin": "A", "label": "VCC"}
+  ]
+}

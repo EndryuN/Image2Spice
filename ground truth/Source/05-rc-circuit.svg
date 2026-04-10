@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 20000303 Stylable//EN"
+"http://www.w3.org/TR/2000/03/WD-SVG-20000303/DTD/svg-20000303-stylable.dtd">
+<svg xml:space="preserve" width="5.5in" height="4in" xmlns="http://www.w3.org/2000/svg" viewBox="900 800 600 400">
+<title>RC Circuit</title>
+<desc>
+  MAR-09-2007, 15:52
+</desc>
+
+<style type="text/css"><![CDATA[
+path {fill-rule:nonzero; stroke-linecap:round; stroke-linejoin:round}
+rect {stroke-linejoin:miter}
+text.t1 {font-family:'Arial',sans-serif;font-size:24px;fill:#000000}
+]]></style>
+<!--g id="Page_1" mediaBox="0 0 2448 3168"-->
+<path style="fill:none;stroke:#000000;stroke-width:1px" d="M 1476,994 l -72,0 m 72,-18 l -72,0 m 36,90 l 0,-72 m -280,-130 l 6,-14 12,29 12,-29 12,29 12,-29 12,29 6,-15 208,0 0,112"/>
+<path style="fill:#FFFFFF;stroke:none" d="M 1116,1152 l 1,-7 2,-7 3,-6 10,-10 6,-3 7,-2 7,-1 7,1 7,2 6,3 6,5 4,5 3,6 2,7 1,7 -1,7 -2,7 -3,6 -4,6 -6,4 -6,3 -7,2 -7,1 -7,-1 -7,-2 -6,-3 -5,-4 -5,-6 -3,-6 -2,-7 -1,-7 z"/>
+<path style="fill:none;stroke:#000000;stroke-width:1px" d="M 1128,1152 l 1,-4 3,-4 4,-3 4,-1 5,1 4,3 2,4 1,4 1,5 3,4 4,2 4,1 5,-1 4,-2 2,-4 1,-5 m 264,-86 l 0,86 -252,0 m -28,-288 l -180,0 0,288 136,0 1,-7 2,-7 3,-6 10,-10 6,-3 7,-2 7,-1 7,1 7,2 6,3 6,5 4,5 3,6 2,7 1,7 -1,7 -2,7 -3,6 -4,6 -6,4 -6,3 -7,2 -7,1 -7,-1 -7,-2 -6,-3 -5,-4 -5,-6 -3,-6 -2,-7 -1,-7"/>
+<text class="t1"><tspan x="1503" y="990">C</tspan><tspan x="1187" y="832">R</tspan></text>
+<path style="fill:none;stroke:#000000;stroke-width:1px" d="M 980,1002 l 0,6"/>
+<path style="fill:#000000;stroke:none" d="M 972,1004 l 8,-24 8,24 -16,0 z"/>
+<text class="t1"><tspan x="947" y="1005">I</tspan></text>
+<!--/g-->
+<!--polygon points="900,800 1550,800, 1550,1200 900,1200" /-->
+</svg>

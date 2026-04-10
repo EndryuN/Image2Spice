@@ -1,0 +1,43 @@
+You are analyzing a circuit schematic image. Your job is to extract EVERY component, connection, ground, and label.
+
+STEP 1: Count and list ALL components. Do NOT miss any. Look carefully at every part of the image.
+
+STEP 2: For each component, provide:
+- name: the label shown (R1, Q3, C1, V2, etc.)
+- type: one of: res, cap, ind, voltage, current, npn, pnp, nmos, pmos, diode, zener, opamp, opamp2
+- value: the value shown next to it (1k, 100u, 2N3904, SINE(0 10m 1k), etc.) — NEVER empty
+- x: position as % of image width (0=left, 100=right)
+- y: position as % of image height (0=top, 100=bottom)
+- orientation: "vertical" (pins top/bottom) or "horizontal" (pins left/right)
+
+STEP 3: Trace ALL wire connections using "ComponentName.PinName" format.
+Pin names:
+- res/cap/ind: A (top/left pin), B (bottom/right pin)
+- voltage/current: + (positive), - (negative)
+- npn/pnp: C (collector), B (base), E (emitter)
+- nmos/pmos: D (drain), G (gate), S (source)
+- diode/zener: + (anode), - (cathode)
+
+STEP 4: List ground connections (downward triangles) and net labels (VCC, OUT, etc.)
+
+Output JSON:
+{
+  "components": [
+    {"name": "R1", "type": "res", "value": "1k", "x": 25, "y": 40, "orientation": "vertical"}
+  ],
+  "connections": [
+    {"from": "R1.B", "to": "Q1.B"}
+  ],
+  "grounds": ["V1.-", "R5.B"],
+  "labels": [
+    {"pin": "R3.A", "name": "VCC"}
+  ]
+}
+
+CRITICAL:
+- Do NOT skip any component. Count them first, then list them all.
+- Do NOT skip any wire. Every visible wire must be in "connections".
+- Values like "1k", "100k", "1u", "2N3904", "SINE(0 10m 1k)" must be exact as shown.
+- If you can't read a value, use a reasonable default (1k for res, 1u for cap, 2N2222 for npn).
+
+Output ONLY valid JSON.

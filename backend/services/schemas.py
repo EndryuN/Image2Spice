@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 VALID_REGIONS = {
@@ -19,11 +19,38 @@ VALID_DIRECTIONS = {
 
 # ── Identify step ─────────────────────────────────────────────────────────────
 
+DEFAULT_VALUES: dict[str, str] = {
+    "res": "1k",
+    "cap": "1u",
+    "ind": "1m",
+    "voltage": "5",
+    "current": "1m",
+    "opamp": "UniversalOpamp2",
+    "opamp2": "UniversalOpamp2",
+    "npn": "2N2222",
+    "pnp": "2N2907",
+    "nmos": "2N7002",
+    "pmos": "BSS84",
+    "diode": "1N4148",
+    "zener": "1N4733A",
+}
+
+
 class IdentifiedComponent(BaseModel):
     type: str
     instanceName: str
     value: str
     value2: Optional[str] = None
+
+    @field_validator("value", mode="before")
+    @classmethod
+    def value_must_not_be_empty(cls, v: str, info) -> str:
+        if isinstance(v, str) and v.strip() == "":
+            # Try to fill from defaults using the type field
+            comp_type = info.data.get("type", "")
+            default = DEFAULT_VALUES.get(comp_type, "1")
+            return default
+        return v
 
 
 class IdentifyResponse(BaseModel):
@@ -45,10 +72,15 @@ class NearbyRef(BaseModel):
 
 class LayoutItem(BaseModel):
     instanceName: str
+    # Grid-based placement (new)
+    row: int = 0
+    col: int = 0
+    orientation: str = "vertical"
+    # Percentage-based placement (legacy)
     x: float = 50
     y: float = 50
     rotation: str = "R0"
-    # Legacy fields (ignored if x/y are provided)
+    # Region-based placement (legacy)
     region: str = "center"
     nearby: list[NearbyRef] = Field(default_factory=list)
 
@@ -93,44 +125,64 @@ class WiresResponse(BaseModel):
 _PASSIVE_ALIASES: dict[str, str] = {
     "1": "A", "2": "B",
     "pin1": "A", "pin2": "B",
+    "pin 1": "A", "pin 2": "B",
     "top": "A", "bottom": "B",
     "left": "A", "right": "B",
     "p": "A", "n": "B",
     "a": "A", "b": "B",
+    "positive": "A", "negative": "B",
+    "pos": "A", "neg": "B",
+    "+": "A", "-": "B",
+    "input": "A", "output": "B",
+    "in": "A", "out": "B",
+    "first": "A", "second": "B",
 }
 
 _SOURCE_ALIASES: dict[str, str] = {
     "1": "+", "2": "-",
     "pin1": "+", "pin2": "-",
+    "pin 1": "+", "pin 2": "-",
     "positive": "+", "negative": "-",
     "pos": "+", "neg": "-",
     "p": "+", "n": "-",
     "v+": "+", "v-": "-",
     "+": "+", "-": "-",
+    "top": "+", "bottom": "-",
+    "a": "+", "b": "-",
+    "first": "+", "second": "-",
 }
 
 _DIODE_ALIASES: dict[str, str] = {
     "1": "+", "2": "-",
     "pin1": "+", "pin2": "-",
+    "pin 1": "+", "pin 2": "-",
     "anode": "+", "cathode": "-",
     "a": "+", "k": "-",
     "p": "+", "n": "-",
     "+": "+", "-": "-",
+    "positive": "+", "negative": "-",
+    "pos": "+", "neg": "-",
+    "top": "+", "bottom": "-",
+    "first": "+", "second": "-",
 }
 
 _BJT_ALIASES: dict[str, str] = {
     "1": "C", "2": "B", "3": "E",
     "pin1": "C", "pin2": "B", "pin3": "E",
+    "pin 1": "C", "pin 2": "B", "pin 3": "E",
     "collector": "C", "base": "B", "emitter": "E",
     "col": "C", "emit": "E",
     "c": "C", "b": "B", "e": "E",
+    "top": "C", "middle": "B", "bottom": "E",
 }
 
 _MOSFET_ALIASES: dict[str, str] = {
     "1": "D", "2": "G", "3": "S",
     "pin1": "D", "pin2": "G", "pin3": "S",
+    "pin 1": "D", "pin 2": "G", "pin 3": "S",
     "drain": "D", "gate": "G", "source": "S",
     "d": "D", "g": "G", "s": "S",
+    "top": "D", "middle": "G", "bottom": "S",
 }
 
 _OPAMP_ALIASES: dict[str, str] = {

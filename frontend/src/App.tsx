@@ -8,27 +8,46 @@ import { ScreenshotPanel } from "./components/ScreenshotPanel";
 import { GenerateWizard } from "./components/GenerateWizard";
 import { useSchematic } from "./hooks/useSchematic";
 import { useTheme } from "./hooks/useTheme";
-import { fetchDictionary } from "./lib/api";
+import { fetchDictionary, redrawWires } from "./lib/api";
 import { generateAsc } from "./lib/ascGenerator";
+import { parseAsc } from "./lib/ascParser";
 import type { Dictionary, LlmProvider } from "./types/schematic";
 
 function App() {
   const [dictionary, setDictionary] = useState<Dictionary | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [mode, setMode] = useState<"select" | "wire">("select");
   const [status, setStatus] = useState("Ready");
   const [validation, _setValidation] = useState<{ valid: boolean; errors: string[] } | null>(null);
   const [showGrid, setShowGrid] = useState(true);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [showPalette, setShowPalette] = useState(true);
-  const [llmProvider, setLlmProvider] = useState<LlmProvider>({ provider: "local", model: "qwen3-vl:8b" });
+  const [connectionData, setConnectionData] = useState<{
+    connections: Array<{ from: { component: string; pin: string }; to: { component: string; pin: string } }>;
+    grounds: Array<{ component: string; pin: string }>;
+    labels: Array<{ component: string; pin: string; label: string }>;
+  } | null>(null);
+  const [llmProvider, setLlmProvider] = useState<LlmProvider>(() => {
+    const saved = localStorage.getItem("llmProvider");
+    if (saved) {
+      try { return JSON.parse(saved); } catch { /* ignore */ }
+    }
+    return { provider: "openai", model: "gpt-4o", apiKey: "" };
+  });
+
+  // Persist provider settings (including API key) to localStorage
+  useEffect(() => {
+    localStorage.setItem("llmProvider", JSON.stringify(llmProvider));
+  }, [llmProvider]);
 
   const { theme, toggleTheme } = useTheme();
 
   const {
     schematic,
+    loadSchematic,
+    clearSchematic,
     setSheet,
     moveComponent,
     updateComponent,
@@ -38,8 +57,11 @@ function App() {
     addWire,
     addWiresBatch,
     deleteWire,
+    deleteWires,
+    clearAllWires,
     addFlag,
     addFlagsBatch,
+    addWiresAndFlagsBatch,
     deleteFlag,
     undo,
     redo,
@@ -47,7 +69,7 @@ function App() {
     canRedo,
   } = useSchematic();
 
-  const ascText = generateAsc(schematic);
+  const ascText = generateAsc(schematic, dictionary);
 
   useEffect(() => {
     fetchDictionary()
@@ -65,6 +87,19 @@ function App() {
   }, [undo, redo]);
 
   const handleUpload = useCallback((file: File) => {
+    if (file.name.endsWith(".asc")) {
+      // Import .asc file directly into editor
+      file.text().then((text) => {
+        const result = parseAsc(text, dictionary);
+        if (result.errors.length > 0) {
+          setStatus(`Imported with ${result.errors.length} warning(s): ${result.errors[0]}`);
+        } else {
+          setStatus(`Imported ${result.schematic.components.length} components, ${result.schematic.wires.length} wires, ${result.schematic.flags.length} flags.`);
+        }
+        loadSchematic(result.schematic);
+      });
+      return;
+    }
     if (file.type === "image/svg+xml") {
       // Rasterize SVG to PNG for vision model compatibility
       const url = URL.createObjectURL(file);
@@ -100,6 +135,14 @@ function App() {
     setWizardOpen(true);
   }, [imageFile]);
 
+  const handleClear = useCallback(() => {
+    clearSchematic();
+    setImageFile(null);
+    setImageUrl(null);
+    setSelectedIds(new Set());
+    setStatus("Cleared. Upload a new image or .asc file.");
+  }, [clearSchematic]);
+
   const handleExport = useCallback(() => {
     const blob = new Blob([ascText], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
@@ -124,12 +167,51 @@ function App() {
     if (name) addFlag(name, { x: 400, y: 300 });
   }, [addFlag]);
 
+  const handleRedrawWires = useCallback(async () => {
+    if (!connectionData || schematic.components.length === 0) return;
+    setStatus("Redrawing wires...");
+    try {
+      const result = await redrawWires({
+        components: schematic.components.map((c) => ({
+          instanceName: c.instanceName,
+          type: c.type,
+          value: c.value,
+          position: c.position,
+          rotation: c.rotation,
+        })),
+        ...connectionData,
+      });
+      // Replace all wires and flags with the new ones
+      const newWires = result.wires.map((w, i) => ({
+        id: `rw-${i}`,
+        from: { x: w.x1, y: w.y1 },
+        to: { x: w.x2, y: w.y2 },
+      }));
+      const newFlags = result.flags.map((f, i) => ({
+        id: `rf-${i}`,
+        name: f.name,
+        position: { x: f.x, y: f.y },
+      }));
+      loadSchematic({
+        ...schematic,
+        wires: newWires,
+        flags: newFlags,
+      });
+      setStatus(`Redrawn: ${newWires.length} wires, ${newFlags.length} flags`);
+    } catch (err) {
+      setStatus(`Redraw failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }, [connectionData, schematic, loadSchematic]);
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg-panel)", color: "var(--color-text)" }}>
       <Toolbar
         onUpload={handleUpload}
         onGenerate={handleGenerate}
+        onRedrawWires={handleRedrawWires}
+        canRedraw={!!connectionData && schematic.components.length > 0}
         onExport={handleExport}
+        onClear={handleClear}
         onUndo={undo}
         onRedo={redo}
         canUndo={canUndo}
@@ -176,8 +258,8 @@ function App() {
         <Editor
           schematic={schematic}
           dictionary={dictionary}
-          selectedId={selectedId}
-          onSelect={setSelectedId}
+          selectedIds={selectedIds}
+          onSelect={setSelectedIds}
           onMoveComponent={moveComponent}
           onAddWire={addWire}
           onSetSheet={setSheet}
@@ -186,15 +268,17 @@ function App() {
         />
 
         {/* Right panel: property + preview + screenshot */}
-        <div style={{ width: 280, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--color-border)" }}>
-          <div style={{ borderBottom: "1px solid var(--color-border)", maxHeight: "30%", overflow: "auto" }}>
+        <div style={{ width: 300, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--color-border)" }}>
+          <div style={{ borderBottom: "1px solid var(--color-border)", minHeight: 120, maxHeight: "50%", overflow: "auto" }}>
             <PropertyPanel
               schematic={schematic}
-              selectedId={selectedId}
+              selectedIds={selectedIds}
               onUpdateComponent={updateComponent}
               onDeleteComponent={deleteComponent}
               onDeleteWire={deleteWire}
               onDeleteFlag={deleteFlag}
+              onDeleteWires={deleteWires}
+              onClearAllWires={clearAllWires}
             />
           </div>
           <AscPreview ascText={ascText} validation={validation} />
@@ -221,9 +305,8 @@ function App() {
           dictionary={dictionary}
           llmProvider={llmProvider}
           onSetSheet={setSheet}
-          onAddComponentsBatch={addComponentsBatch}
-          onAddWiresBatch={addWiresBatch}
-          onAddFlagsBatch={addFlagsBatch}
+          onLoadSchematic={loadSchematic}
+          onConnectionData={setConnectionData}
           onClose={() => {
             setWizardOpen(false);
             setStatus("Wizard closed.");

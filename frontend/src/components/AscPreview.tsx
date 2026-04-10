@@ -5,7 +5,7 @@ interface AscPreviewProps {
 
 export function AscPreview({ ascText, validation }: AscPreviewProps) {
   return (
-    <div style={{ flex: 1, display: "flex", flexDirection: "column", borderLeft: "1px solid var(--color-border)" }}>
+    <div style={{ flex: 0, maxHeight: 200, display: "flex", flexDirection: "column", borderBottom: "1px solid var(--color-border)" }}>
       <div style={{ padding: "4px 8px", borderBottom: "1px solid var(--color-border)", fontSize: 12, fontWeight: "bold", display: "flex", justifyContent: "space-between", color: "var(--color-text)" }}>
         <span>.asc Preview</span>
         {validation && (

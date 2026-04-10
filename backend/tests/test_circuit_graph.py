@@ -110,11 +110,12 @@ def _build_circuit04_graph() -> CircuitGraph:
 def test_assign_tiers_parallel_circuit():
     graph = _build_circuit04_graph()
     graph.assign_tiers()
-    assert len(graph.tiers) >= 2
+    # Parallel circuit: all components share the same two nets → same tier
     r1_tier = graph.components["R1"].tier
     r2_tier = graph.components["R2"].tier
     r3_tier = graph.components["R3"].tier
-    assert r1_tier == r2_tier == r3_tier
+    v1_tier = graph.components["V1"].tier
+    assert r1_tier == r2_tier == r3_tier == v1_tier
 
 
 def test_assign_tiers_series_circuit():

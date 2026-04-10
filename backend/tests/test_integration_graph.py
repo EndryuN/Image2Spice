@@ -36,11 +36,11 @@ DICTIONARY = {
 def test_circuit04_full_pipeline():
     analysis = {
         "components": [
-            {"name": "V1", "type": "voltage", "value": "30V"},
-            {"name": "R1", "type": "res", "value": "2"},
-            {"name": "R2", "type": "res", "value": "8"},
-            {"name": "R3", "type": "res", "value": "1"},
-            {"name": "V2", "type": "voltage", "value": "10V"},
+            {"name": "V1", "type": "voltage", "value": "30V", "x": 10, "y": 30},
+            {"name": "R1", "type": "res", "value": "2", "x": 30, "y": 65},
+            {"name": "R2", "type": "res", "value": "8", "x": 50, "y": 65},
+            {"name": "R3", "type": "res", "value": "1", "x": 75, "y": 65},
+            {"name": "V2", "type": "voltage", "value": "10V", "x": 90, "y": 30},
         ],
         "connections": [
             {"from": "V1.+", "to": "R1.A"},
@@ -68,7 +68,7 @@ def test_circuit04_full_pipeline():
     assert len(window_lines) >= 10
 
     wire_lines = [l for l in lines if l.startswith("WIRE")]
-    assert len(wire_lines) >= 4
+    assert len(wire_lines) >= 2  # 2 clean bus wires for parallel circuit
 
     for wl in wire_lines:
         parts = wl.split()

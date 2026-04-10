@@ -1,48 +1,32 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import type { Dictionary, WizardComponent, LlmProvider } from "../types/schematic";
-import {
-  wizardIdentify,
-  wizardDirectives,
-  wizardLayout,
-  wizardWires,
-} from "../lib/api";
+import type { Dictionary, LlmProvider, Schematic } from "../types/schematic";
+import { wizardGenerateAsc } from "../lib/api";
+import { parseAsc } from "../lib/ascParser";
+
+interface ConnectionData {
+  connections: Array<{ from: { component: string; pin: string }; to: { component: string; pin: string } }>;
+  grounds: Array<{ component: string; pin: string }>;
+  labels: Array<{ component: string; pin: string; label: string }>;
+}
 
 interface GenerateWizardProps {
   imageFile: File;
   dictionary: Dictionary | null;
   onSetSheet: (width: number, height: number) => void;
-  onAddComponentsBatch: (comps: { type: string; instanceName: string; value: string; pos: { x: number; y: number }; value2?: string; rotation?: string }[]) => void;
-  onAddWiresBatch: (wires: { from: { x: number; y: number }; to: { x: number; y: number } }[]) => void;
-  onAddFlagsBatch: (flags: { name: string; pos: { x: number; y: number } }[]) => void;
+  onLoadSchematic: (s: Schematic) => void;
+  onConnectionData?: (data: ConnectionData) => void;
   onClose: () => void;
   llmProvider: LlmProvider;
 }
 
-type Step = 1 | 2 | 3 | 4 | 5 | 6; // 6 = done
-
-const VALUE_HINTS: Record<string, string> = {
-  res: "e.g. 10k, 1M, 100, {param}",
-  cap: "e.g. 100n, 1u, 10p",
-  ind: "e.g. 10u, 1m, 100n",
-  voltage: "e.g. 5, AC 1, PULSE(...), {param}",
-  current: "e.g. 1m, AC 0.01",
-  diode: "e.g. 1N4148, D",
-  zener: "e.g. 1N4733, D",
-  npn: "e.g. 2N2222, BC547",
-  pnp: "e.g. 2N3906, BC557",
-  nmos: "e.g. 2N7000, IRF540",
-  pmos: "e.g. IRF9540",
-  opamp: "e.g. LM358, UniversalOpamp2",
-  opamp2: "e.g. LM358, ADA4627",
-};
+type Step = 1 | 2 | 3; // 1=canvas, 2=generating, 3=done
 
 export function GenerateWizard({
   imageFile,
   dictionary,
   onSetSheet,
-  onAddComponentsBatch,
-  onAddWiresBatch,
-  onAddFlagsBatch,
+  onLoadSchematic,
+  onConnectionData,
   onClose,
   llmProvider,
 }: GenerateWizardProps) {
@@ -50,35 +34,14 @@ export function GenerateWizard({
   const [minimized, setMinimized] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-
-  // Abort in-flight requests on unmount or close
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort();
-    };
-  }, []);
-
-  // Step 1: canvas
   const [canvasWidth, setCanvasWidth] = useState(880);
   const [canvasHeight, setCanvasHeight] = useState(680);
+  const [ascText, setAscText] = useState("");
+  const [stats, setStats] = useState<{ components: number; wires: number; flags: number } | null>(null);
 
-  // Step 2: components
-  const [components, setComponents] = useState<WizardComponent[]>([]);
-
-  // Step 3: directives
-  const [directives, setDirectives] = useState<string[]>([]);
-
-  // Step 4: positions
-  const [positions, setPositions] = useState<Record<string, { x: number; y: number }>>({});
-
-  // Summary
-  const [wireCount, setWireCount] = useState(0);
-  const [flagCount, setFlagCount] = useState(0);
-
-  // Elapsed timer for loading states
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (loading) {
@@ -86,775 +49,172 @@ export function GenerateWizard({
       timerRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
-      timerRef.current = null;
     }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [loading]);
 
-  const componentTypes = dictionary ? Object.keys(dictionary.components) : [];
+  useEffect(() => () => { abortRef.current?.abort(); }, []);
 
   // Auto-detect canvas size from image
   useEffect(() => {
     const img = new Image();
     img.onload = () => {
-      setCanvasWidth(img.naturalWidth);
-      setCanvasHeight(img.naturalHeight);
+      const minDim = 800;
+      const scaleX = img.naturalWidth < minDim ? minDim / img.naturalWidth : 1;
+      const scaleY = img.naturalHeight < minDim ? minDim / img.naturalHeight : 1;
+      const scale = Math.max(scaleX, scaleY, 1);
+      setCanvasWidth(Math.round(img.naturalWidth * scale));
+      setCanvasHeight(Math.round(img.naturalHeight * scale));
     };
     img.src = URL.createObjectURL(imageFile);
     return () => URL.revokeObjectURL(img.src);
   }, [imageFile]);
 
-  // ── Step transitions ────────────────────────────────────────────────────────
-
-  const goStep1to2 = useCallback(async () => {
+  const doGenerate = useCallback(async () => {
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
     setLoading(true);
     setError(null);
+    setStep(2);
     onSetSheet(canvasWidth, canvasHeight);
-    try {
-      const result = await wizardIdentify(imageFile, llmProvider, ac.signal);
-      setComponents(
-        result.components.map((c) => ({ ...c, confirmed: false }))
-      );
-      setStep(2);
-    } catch (e: unknown) {
-      if ((e as Error).name === "AbortError") return;
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [imageFile, llmProvider, canvasWidth, canvasHeight, onSetSheet]);
 
-  const goStep2to3 = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
     try {
-      const result = await wizardDirectives(imageFile, llmProvider, ac.signal);
-      setDirectives(result.directives);
+      const result = await wizardGenerateAsc(imageFile, llmProvider, { width: canvasWidth, height: canvasHeight }, ac.signal) as {
+        asc: string;
+        connections?: Array<{ from: { component: string; pin: string }; to: { component: string; pin: string } }>;
+        grounds?: Array<{ component: string; pin: string }>;
+        labels?: Array<{ component: string; pin: string; label: string }>;
+      };
+      setAscText(result.asc);
+      // Save connection data for redraw-wires
+      if (onConnectionData && result.connections) {
+        onConnectionData({
+          connections: result.connections,
+          grounds: result.grounds ?? [],
+          labels: result.labels ?? [],
+        });
+      }
+      const parsed = parseAsc(result.asc, dictionary);
+      const s = parsed.schematic;
+
+      // Scale output to fill canvas if VLM used smaller coordinates
+      if (s.components.length > 0 || s.wires.length > 0) {
+        let maxX = 0, maxY = 0;
+        for (const c of s.components) { maxX = Math.max(maxX, c.position.x + 64); maxY = Math.max(maxY, c.position.y + 96); }
+        for (const w of s.wires) { maxX = Math.max(maxX, w.from.x, w.to.x); maxY = Math.max(maxY, w.from.y, w.to.y); }
+        for (const f of s.flags) { maxX = Math.max(maxX, f.position.x); maxY = Math.max(maxY, f.position.y); }
+
+        if (maxX > 0 && maxY > 0) {
+          const scaleX = maxX < canvasWidth * 0.8 ? (canvasWidth * 0.85) / maxX : 1;
+          const scaleY = maxY < canvasHeight * 0.8 ? (canvasHeight * 0.85) / maxY : 1;
+          const scale = Math.min(scaleX, scaleY);
+          if (scale > 1.1) {
+            const snap = (v: number) => Math.round((v * scale) / 16) * 16;
+            for (const c of s.components) { c.position.x = snap(c.position.x); c.position.y = snap(c.position.y); }
+            for (const w of s.wires) { w.from.x = snap(w.from.x); w.from.y = snap(w.from.y); w.to.x = snap(w.to.x); w.to.y = snap(w.to.y); }
+            for (const f of s.flags) { f.position.x = snap(f.position.x); f.position.y = snap(f.position.y); }
+            for (const t of s.text) { t.position.x = snap(t.position.x); t.position.y = snap(t.position.y); }
+          }
+        }
+        s.sheet = { width: canvasWidth, height: canvasHeight };
+      }
+
+      onLoadSchematic(s);
+      setStats({ components: s.components.length, wires: s.wires.length, flags: s.flags.length });
+      if (parsed.errors.length > 0) setError(`Parsed with ${parsed.errors.length} warning(s): ${parsed.errors[0]}`);
       setStep(3);
     } catch (e: unknown) {
       if ((e as Error).name === "AbortError") return;
       setError(e instanceof Error ? e.message : String(e));
+      setStep(1);
     } finally {
       setLoading(false);
     }
-  }, [imageFile, llmProvider]);
-
-  const fallbackGrid = useCallback(
-    (comps: WizardComponent[]): Record<string, { x: number; y: number }> => {
-      const cols = Math.max(1, Math.ceil(Math.sqrt(comps.length)));
-      const spacing = 128;
-      const startX = 160;
-      const startY = 160;
-      const pos: Record<string, { x: number; y: number }> = {};
-      comps.forEach((c, i) => {
-        pos[c.instanceName] = {
-          x: startX + (i % cols) * spacing,
-          y: startY + Math.floor(i / cols) * spacing,
-        };
-      });
-      return pos;
-    },
-    [],
-  );
-
-  const goStep3to4 = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
-    const confirmed = components.filter((c) => c.confirmed !== false);
-
-    let resultPositions: Record<string, { x: number; y: number }> = {};
-    try {
-      const result = await wizardLayout(imageFile, confirmed, llmProvider, { width: canvasWidth, height: canvasHeight }, ac.signal);
-      resultPositions = result.positions;
-    } catch (e: unknown) {
-      if ((e as Error).name === "AbortError") { setLoading(false); return; }
-      // VLM layout failed — use grid fallback, don't block the pipeline
-      setError(`Layout AI failed, using auto-layout. ${e instanceof Error ? e.message : String(e)}`);
-      resultPositions = fallbackGrid(confirmed);
-    }
-
-    // Fill in any components the VLM missed with fallback positions
-    const missing = confirmed.filter((c) => !resultPositions[c.instanceName]);
-    if (missing.length > 0) {
-      const grid = fallbackGrid(missing);
-      for (const [name, pos] of Object.entries(grid)) {
-        resultPositions[name] = pos;
-      }
-    }
-
-    setPositions(resultPositions);
-
-    // Place all confirmed components in one batch
-    onAddComponentsBatch(
-      confirmed.map((comp) => {
-        const posData = resultPositions[comp.instanceName] ?? { x: 400, y: 300 };
-        return {
-          type: comp.type,
-          instanceName: comp.instanceName,
-          value: comp.value,
-          pos: posData,
-          value2: comp.value2,
-          rotation: (posData as { x: number; y: number; rotation?: string }).rotation,
-        };
-      })
-    );
-
-    setStep(4);
-    setLoading(false);
-  }, [imageFile, components, onAddComponentsBatch, llmProvider, fallbackGrid]);
-
-  const goStep4to5 = useCallback(async () => {
-    abortRef.current?.abort();
-    const ac = new AbortController();
-    abortRef.current = ac;
-    setLoading(true);
-    setError(null);
-    try {
-      const confirmed = components.filter((c) => c.confirmed !== false);
-      const result = await wizardWires(imageFile, confirmed, positions, llmProvider, ac.signal);
-
-      onAddWiresBatch(
-        result.wires.map((w) => ({ from: { x: w.x1, y: w.y1 }, to: { x: w.x2, y: w.y2 } }))
-      );
-      onAddFlagsBatch(
-        result.flags.map((f) => ({ name: f.name, pos: { x: f.x, y: f.y } }))
-      );
-
-      setWireCount(result.wires.length);
-      setFlagCount(result.flags.length);
-      setStep(5);
-
-      // Immediately mark as done
-      setStep(6);
-    } catch (e: unknown) {
-      if ((e as Error).name === "AbortError") return;
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [imageFile, components, positions, onAddWiresBatch, onAddFlagsBatch, llmProvider]);
-
-  // ── Component row helpers ───────────────────────────────────────────────────
-
-  const updateComp = (idx: number, updates: Partial<WizardComponent>) => {
-    setComponents((prev) =>
-      prev.map((c, i) => (i === idx ? { ...c, ...updates } : c))
-    );
-  };
-
-  const deleteComp = (idx: number) => {
-    setComponents((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const confirmComp = (idx: number) => {
-    updateComp(idx, { confirmed: true });
-  };
-
-  const addMissingComp = () => {
-    setComponents((prev) => [
-      ...prev,
-      { type: componentTypes[0] ?? "res", instanceName: `R${prev.length + 1}`, value: "1k", confirmed: false },
-    ]);
-  };
-
-  // ── Directives helpers ──────────────────────────────────────────────────────
-
-  const updateDirective = (idx: number, val: string) => {
-    setDirectives((prev) => prev.map((d, i) => (i === idx ? val : d)));
-  };
-
-  const deleteDirective = (idx: number) => {
-    setDirectives((prev) => prev.filter((_, i) => i !== idx));
-  };
-
-  const addDirective = () => {
-    setDirectives((prev) => [...prev, ".tran 1m"]);
-  };
-
-  // ── Render ──────────────────────────────────────────────────────────────────
+  }, [imageFile, llmProvider, canvasWidth, canvasHeight, onSetSheet, onLoadSchematic]);
 
   if (minimized) {
     return (
-      <div
-        style={{
-          position: "fixed",
-          bottom: 24,
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 2000,
-          background: "var(--bg-panel)",
-          border: "1px solid var(--color-border)",
-          borderRadius: 24,
-          padding: "8px 20px",
-          display: "flex",
-          alignItems: "center",
-          gap: 12,
-          boxShadow: "0 4px 16px rgba(0,0,0,0.25)",
-          cursor: "default",
-        }}
-      >
-        <span style={{ fontSize: 13, color: "var(--color-text)" }}>
-          Generate Wizard — Step {step} of 5
-        </span>
-        <button
-          onClick={() => setMinimized(false)}
-          style={{
-            padding: "2px 10px",
-            borderRadius: 12,
-            border: "1px solid var(--color-border)",
-            background: "var(--bg-canvas)",
-            color: "var(--color-text)",
-            cursor: "pointer",
-            fontSize: 12,
-          }}
-        >
-          Show
-        </button>
-        <button
-          onClick={onClose}
-          style={{
-            padding: "2px 8px",
-            borderRadius: 12,
-            border: "1px solid var(--color-border)",
-            background: "var(--bg-canvas)",
-            color: "var(--color-text)",
-            cursor: "pointer",
-            fontSize: 12,
-          }}
-        >
-          ✕
-        </button>
+      <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 2000, background: "var(--bg-panel)", border: "1px solid var(--color-border)", borderRadius: 24, padding: "8px 20px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.25)" }}>
+        <span style={{ fontSize: 13, color: "var(--color-text)" }}>Generating... {elapsed}s</span>
+        <button onClick={() => setMinimized(false)} style={minBtnStyle}>Show</button>
+        <button onClick={onClose} style={minBtnStyle}>✕</button>
       </div>
     );
   }
 
-  const stepLabels = ["Canvas", "Identify", "Directives", "Layout", "Wires"];
-
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        zIndex: 1500,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "rgba(0,0,0,0.45)",
-      }}
-      onClick={(e) => {
-        // Close if clicking the backdrop itself
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        style={{
-          background: "var(--bg-panel)",
-          color: "var(--color-text)",
-          border: "1px solid var(--color-border)",
-          borderRadius: 8,
-          width: 620,
-          maxWidth: "95vw",
-          maxHeight: "90vh",
-          display: "flex",
-          flexDirection: "column",
-          boxShadow: "0 8px 32px rgba(0,0,0,0.35)",
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            padding: "10px 16px",
-            borderBottom: "1px solid var(--color-border)",
-            gap: 8,
-          }}
-        >
+    <div style={{ position: "fixed", inset: 0, zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.45)" }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{ background: "var(--bg-panel)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 8, width: 500, maxWidth: "95vw", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.35)" }}
+        onClick={(e) => e.stopPropagation()}>
+
+        <div style={{ display: "flex", alignItems: "center", padding: "10px 16px", borderBottom: "1px solid var(--color-border)", gap: 8 }}>
           <strong style={{ flex: 1, fontSize: 15 }}>Generate from Image</strong>
-          <button
-            onClick={() => setMinimized(true)}
-            title="Minimize"
-            style={{
-              background: "none",
-              border: "1px solid var(--color-border)",
-              borderRadius: 4,
-              padding: "2px 8px",
-              cursor: "pointer",
-              color: "var(--color-text)",
-              fontSize: 12,
-            }}
-          >
-            —
-          </button>
-          <button
-            onClick={onClose}
-            title="Close"
-            style={{
-              background: "none",
-              border: "1px solid var(--color-border)",
-              borderRadius: 4,
-              padding: "2px 8px",
-              cursor: "pointer",
-              color: "var(--color-text)",
-              fontSize: 12,
-            }}
-          >
-            ✕
-          </button>
+          {step === 2 && <button onClick={() => setMinimized(true)} style={headerBtnStyle}>—</button>}
+          <button onClick={onClose} style={headerBtnStyle}>✕</button>
         </div>
 
-        {/* Step indicator */}
-        {step <= 5 && (
-          <div
-            style={{
-              display: "flex",
-              padding: "8px 16px",
-              gap: 4,
-              borderBottom: "1px solid var(--color-border)",
-              background: "var(--bg-canvas)",
-            }}
-          >
-            {stepLabels.map((label, i) => {
-              const s = (i + 1) as Step;
-              const active = s === step;
-              const done = s < step;
-              return (
-                <div
-                  key={label}
-                  style={{
-                    flex: 1,
-                    textAlign: "center",
-                    fontSize: 11,
-                    padding: "4px 2px",
-                    borderRadius: 4,
-                    background: done
-                      ? "var(--color-success, #4caf50)"
-                      : active
-                      ? "var(--color-accent, #1976d2)"
-                      : "var(--bg-panel)",
-                    color: active || done ? "#fff" : "var(--color-text-muted)",
-                    fontWeight: active ? "bold" : "normal",
-                    border: "1px solid var(--color-border)",
-                  }}
-                >
-                  {done ? "✓ " : ""}{label}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Body */}
         <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
           {error && (
-            <div
-              style={{
-                marginBottom: 12,
-                padding: "8px 12px",
-                background: "var(--color-error-bg, #ffebee)",
-                color: "var(--color-error, #c62828)",
-                border: "1px solid var(--color-error, #c62828)",
-                borderRadius: 4,
-                fontSize: 13,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
+            <div style={{ marginBottom: 12, padding: "8px 12px", background: "var(--color-error-bg, #ffebee)", color: "var(--color-error, #c62828)", border: "1px solid var(--color-error, #c62828)", borderRadius: 4, fontSize: 13, display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ flex: 1 }}>{error}</span>
-              <button
-                onClick={() => {
-                  setError(null);
-                  if (step === 1) goStep1to2();
-                  else if (step === 2) goStep2to3();
-                  else if (step === 3) goStep3to4();
-                  else if (step === 4) goStep4to5();
-                }}
-                style={{
-                  padding: "2px 10px",
-                  border: "1px solid var(--color-error, #c62828)",
-                  borderRadius: 4,
-                  background: "transparent",
-                  color: "var(--color-error, #c62828)",
-                  cursor: "pointer",
-                  fontSize: 12,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                Retry
-              </button>
+              <button onClick={() => { setError(null); doGenerate(); }} style={{ padding: "2px 10px", border: "1px solid var(--color-error)", borderRadius: 4, background: "transparent", color: "var(--color-error)", cursor: "pointer", fontSize: 12 }}>Retry</button>
             </div>
           )}
 
-          {/* ── Step 1: Canvas ── */}
           {step === 1 && (
             <div>
-              <p style={{ marginTop: 0, fontSize: 13 }}>
-                Set the canvas size for the generated schematic.
-              </p>
+              <p style={{ marginTop: 0, fontSize: 13 }}>Set canvas size, then click Generate.</p>
               <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
-                <label style={{ fontSize: 13 }}>
-                  Width (px)
-                  <br />
-                  <input
-                    type="number"
-                    value={canvasWidth}
-                    onChange={(e) => setCanvasWidth(Number(e.target.value))}
-                    style={{
-                      marginTop: 4,
-                      padding: "4px 8px",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 4,
-                      background: "var(--bg-canvas)",
-                      color: "var(--color-text)",
-                      width: 100,
-                    }}
-                  />
+                <label style={{ fontSize: 13 }}>Width<br />
+                  <input type="number" value={canvasWidth} onChange={(e) => setCanvasWidth(Number(e.target.value))} style={inputStyle} />
                 </label>
-                <label style={{ fontSize: 13 }}>
-                  Height (px)
-                  <br />
-                  <input
-                    type="number"
-                    value={canvasHeight}
-                    onChange={(e) => setCanvasHeight(Number(e.target.value))}
-                    style={{
-                      marginTop: 4,
-                      padding: "4px 8px",
-                      border: "1px solid var(--color-border)",
-                      borderRadius: 4,
-                      background: "var(--bg-canvas)",
-                      color: "var(--color-text)",
-                      width: 100,
-                    }}
-                  />
+                <label style={{ fontSize: 13 }}>Height<br />
+                  <input type="number" value={canvasHeight} onChange={(e) => setCanvasHeight(Number(e.target.value))} style={inputStyle} />
                 </label>
               </div>
-              <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 8 }}>
-                Image: <em>{imageFile.name}</em> — Next step will identify components.
-              </p>
+              <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 8 }}>Image: <em>{imageFile.name}</em></p>
             </div>
           )}
 
-          {/* ── Step 2: Identify Components ── */}
           {step === 2 && (
-            <div>
-              <p style={{ marginTop: 0, fontSize: 13 }}>
-                Review identified components. Edit type, name, or value, then confirm each row.
+            <div style={{ textAlign: "center", padding: 24 }}>
+              <p style={{ fontSize: 15, fontWeight: "bold", margin: "0 0 8px 0" }}>Generating schematic...</p>
+              <p style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
+                {elapsed < 10 ? "Sending image to model..." : elapsed < 30 ? "Analyzing circuit..." : elapsed < 60 ? "Generating .asc..." : "Still working — complex circuits take longer"}
               </p>
-              <div style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ background: "var(--bg-canvas)" }}>
-                      <th style={thStyle}>Type</th>
-                      <th style={thStyle}>Name</th>
-                      <th style={thStyle}>Value</th>
-                      <th style={thStyle}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {components.map((comp, idx) => (
-                      <tr
-                        key={idx}
-                        style={{
-                          borderLeft: comp.confirmed
-                            ? "3px solid #4caf50"
-                            : "3px solid transparent",
-                        }}
-                      >
-                        <td style={tdStyle}>
-                          <select
-                            value={comp.type}
-                            onChange={(e) => updateComp(idx, { type: e.target.value })}
-                            style={{
-                              padding: "2px 4px",
-                              border: "1px solid var(--color-border)",
-                              borderRadius: 3,
-                              background: "var(--bg-canvas)",
-                              color: "var(--color-text)",
-                              fontSize: 12,
-                              maxWidth: 120,
-                            }}
-                          >
-                            {componentTypes.map((t) => (
-                              <option key={t} value={t}>
-                                {dictionary?.components[t]?.displayName ?? t}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td style={tdStyle}>
-                          <input
-                            value={comp.instanceName}
-                            onChange={(e) => updateComp(idx, { instanceName: e.target.value })}
-                            style={inputStyle}
-                          />
-                        </td>
-                        <td style={tdStyle}>
-                          <input
-                            value={comp.value}
-                            placeholder={VALUE_HINTS[comp.type] ?? ""}
-                            onChange={(e) => updateComp(idx, { value: e.target.value })}
-                            style={inputStyle}
-                          />
-                        </td>
-                        <td style={{ ...tdStyle, display: "flex", gap: 4 }}>
-                          <button
-                            onClick={() => confirmComp(idx)}
-                            title="Confirm"
-                            style={{
-                              padding: "2px 6px",
-                              background: comp.confirmed
-                                ? "var(--color-success, #4caf50)"
-                                : "var(--bg-panel)",
-                              border: "1px solid var(--color-border)",
-                              borderRadius: 3,
-                              cursor: "pointer",
-                              color: comp.confirmed ? "#fff" : "var(--color-text)",
-                            }}
-                          >
-                            ✓
-                          </button>
-                          <button
-                            onClick={() => deleteComp(idx)}
-                            title="Delete"
-                            style={{
-                              padding: "2px 6px",
-                              background: "var(--bg-panel)",
-                              border: "1px solid var(--color-border)",
-                              borderRadius: 3,
-                              cursor: "pointer",
-                              color: "var(--color-error, #c62828)",
-                            }}
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-                <button
-                  onClick={addMissingComp}
-                  style={{
-                    padding: "4px 12px",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 4,
-                    background: "var(--bg-canvas)",
-                    color: "var(--color-text)",
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
-                >
-                  + Add Missing
-                </button>
-                <button
-                  onClick={() =>
-                    setComponents((prev) => prev.map((c) => ({ ...c, confirmed: true })))
-                  }
-                  style={{
-                    padding: "4px 12px",
-                    border: "1px solid var(--color-border)",
-                    borderRadius: 4,
-                    background: "var(--color-success, #4caf50)",
-                    color: "#fff",
-                    cursor: "pointer",
-                    fontSize: 12,
-                  }}
-                >
-                  Confirm All
-                </button>
-              </div>
+              <p style={{ fontSize: 24, fontWeight: "bold", color: "var(--color-accent, #1976d2)", marginTop: 12 }}>{elapsed}s</p>
             </div>
           )}
 
-          {/* ── Step 3: Directives ── */}
           {step === 3 && (
             <div>
-              <p style={{ marginTop: 0, fontSize: 13 }}>
-                Edit simulation directives. These will be added as text to the schematic.
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                {directives.map((d, idx) => (
-                  <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                    <input
-                      value={d}
-                      onChange={(e) => updateDirective(idx, e.target.value)}
-                      style={{
-                        flex: 1,
-                        padding: "4px 8px",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 4,
-                        background: "var(--bg-canvas)",
-                        color: "var(--color-text)",
-                        fontSize: 13,
-                        fontFamily: "monospace",
-                      }}
-                    />
-                    <button
-                      onClick={() => deleteDirective(idx)}
-                      style={{
-                        padding: "4px 8px",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 4,
-                        background: "var(--bg-panel)",
-                        color: "var(--color-error, #c62828)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-                {directives.length === 0 && (
-                  <p style={{ fontSize: 12, color: "var(--color-text-muted)", margin: 0 }}>
-                    No directives detected.
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={addDirective}
-                style={{
-                  marginTop: 8,
-                  padding: "4px 12px",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 4,
-                  background: "var(--bg-canvas)",
-                  color: "var(--color-text)",
-                  cursor: "pointer",
-                  fontSize: 12,
-                }}
-              >
-                + Add Directive
-              </button>
-            </div>
-          )}
-
-          {/* ── Step 4: Layout ── */}
-          {step === 4 && (
-            <div>
-              <p style={{ marginTop: 0, fontSize: 13 }}>
-                Components have been placed in the editor. You can minimize this modal to drag
-                components to their final positions.
-              </p>
-              <div
-                style={{
-                  padding: 12,
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 4,
-                  background: "var(--bg-canvas)",
-                  fontSize: 12,
-                }}
-              >
-                <strong>{components.filter((c) => c.confirmed !== false).length}</strong>{" "}
-                components placed in editor.
-              </div>
-              <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 8 }}>
-                Click <em>Minimize</em> (—) to interact with the canvas, then come back to continue.
-              </p>
-            </div>
-          )}
-
-          {/* ── Step 5: Wires (processing) ── */}
-          {step === 5 && (
-            <div style={{ textAlign: "center", padding: 24 }}>
-              <div style={{ fontSize: 32, marginBottom: 12 }}>⚙️</div>
-              <p style={{ fontSize: 13, margin: 0 }}>Tracing wires...</p>
-            </div>
-          )}
-
-          {/* ── Done ── */}
-          {step === 6 && (
-            <div>
-              <p style={{ marginTop: 0, fontSize: 15, fontWeight: "bold" }}>
-                Generation complete!
-              </p>
-              <ul style={{ fontSize: 13, lineHeight: 1.7 }}>
-                <li>
-                  <strong>{components.filter((c) => c.confirmed !== false).length}</strong>{" "}
-                  components placed
-                </li>
-                <li>
-                  <strong>{wireCount}</strong> wires traced
-                </li>
-                <li>
-                  <strong>{flagCount}</strong> flags added
-                </li>
-                <li>
-                  <strong>{directives.length}</strong> directives added
-                </li>
-              </ul>
-              <p style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
-                Review the schematic in the editor. Use Undo if you need to roll back.
-              </p>
+              <p style={{ marginTop: 0, fontSize: 15, fontWeight: "bold" }}>Generation complete!</p>
+              {stats && (
+                <ul style={{ fontSize: 13, lineHeight: 1.7 }}>
+                  <li><strong>{stats.components}</strong> components</li>
+                  <li><strong>{stats.wires}</strong> wires</li>
+                  <li><strong>{stats.flags}</strong> flags</li>
+                </ul>
+              )}
+              <details style={{ fontSize: 12, marginTop: 8 }}>
+                <summary style={{ cursor: "pointer", color: "var(--color-text-muted)" }}>Show raw .asc</summary>
+                <pre style={{ marginTop: 8, padding: 8, background: "var(--color-preview-bg)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 4, fontSize: 11, maxHeight: 200, overflow: "auto", whiteSpace: "pre-wrap" }}>{ascText}</pre>
+              </details>
+              <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 8 }}>Review in the editor. Use Undo to roll back.</p>
             </div>
           )}
         </div>
 
-        {/* Footer / navigation */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: 8,
-            padding: "10px 16px",
-            borderTop: "1px solid var(--color-border)",
-          }}
-        >
-          {step === 6 ? (
-            <button
-              onClick={onClose}
-              style={primaryBtnStyle}
-            >
-              Close
-            </button>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, padding: "10px 16px", borderTop: "1px solid var(--color-border)" }}>
+          {step === 3 ? (
+            <button onClick={onClose} style={primaryBtnStyle}>Close</button>
           ) : (
             <>
-              <button
-                onClick={onClose}
-                style={secondaryBtnStyle}
-                disabled={loading}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => {
-                  if (step === 1) goStep1to2();
-                  else if (step === 2) goStep2to3();
-                  else if (step === 3) goStep3to4();
-                  else if (step === 4) goStep4to5();
-                }}
-                disabled={loading}
-                style={primaryBtnStyle}
-              >
-                {loading ? `AI is analyzing... (${elapsed}s)` : step === 4 ? "Trace Wires" : "Next →"}
-              </button>
+              <button onClick={onClose} style={secondaryBtnStyle} disabled={loading}>Cancel</button>
+              {step === 1 && <button onClick={doGenerate} style={primaryBtnStyle}>Generate</button>}
             </>
-          )}
-          {loading && (
-            <span style={{ fontSize: 11, color: "var(--color-text-muted)", alignSelf: "center" }}>
-              {elapsed < 10
-                ? "Sending image to model..."
-                : elapsed < 30
-                ? "Model is processing..."
-                : elapsed < 120
-                ? "Still working — VLM calls can take 1-2 min on first run"
-                : "Taking longer than usual — check Ollama is running"}
-            </span>
           )}
         </div>
       </div>
@@ -862,48 +222,8 @@ export function GenerateWizard({
   );
 }
 
-// ── Shared inline styles ─────────────────────────────────────────────────────
-
-const thStyle: React.CSSProperties = {
-  padding: "4px 8px",
-  borderBottom: "1px solid var(--color-border)",
-  textAlign: "left",
-  fontWeight: "bold",
-};
-
-const tdStyle: React.CSSProperties = {
-  padding: "4px 6px",
-  borderBottom: "1px solid var(--color-border)",
-};
-
-const inputStyle: React.CSSProperties = {
-  padding: "2px 6px",
-  border: "1px solid var(--color-border)",
-  borderRadius: 3,
-  background: "var(--bg-canvas)",
-  color: "var(--color-text)",
-  fontSize: 12,
-  width: "100%",
-  boxSizing: "border-box",
-};
-
-const primaryBtnStyle: React.CSSProperties = {
-  padding: "6px 18px",
-  background: "var(--color-accent, #1976d2)",
-  color: "#fff",
-  border: "none",
-  borderRadius: 4,
-  cursor: "pointer",
-  fontSize: 13,
-  fontWeight: "bold",
-};
-
-const secondaryBtnStyle: React.CSSProperties = {
-  padding: "6px 14px",
-  background: "var(--bg-canvas)",
-  color: "var(--color-text)",
-  border: "1px solid var(--color-border)",
-  borderRadius: 4,
-  cursor: "pointer",
-  fontSize: 13,
-};
+const headerBtnStyle: React.CSSProperties = { background: "none", border: "1px solid var(--color-border)", borderRadius: 4, padding: "2px 8px", cursor: "pointer", color: "var(--color-text)", fontSize: 12 };
+const minBtnStyle: React.CSSProperties = { padding: "2px 10px", borderRadius: 12, border: "1px solid var(--color-border)", background: "var(--bg-canvas)", color: "var(--color-text)", cursor: "pointer", fontSize: 12 };
+const primaryBtnStyle: React.CSSProperties = { padding: "6px 18px", background: "var(--color-accent, #1976d2)", color: "#fff", border: "none", borderRadius: 4, cursor: "pointer", fontSize: 13, fontWeight: "bold" };
+const secondaryBtnStyle: React.CSSProperties = { padding: "6px 14px", background: "var(--bg-canvas)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 4, cursor: "pointer", fontSize: 13 };
+const inputStyle: React.CSSProperties = { marginTop: 4, padding: "4px 8px", border: "1px solid var(--color-border)", borderRadius: 4, background: "var(--bg-canvas)", color: "var(--color-text)", width: 100 };

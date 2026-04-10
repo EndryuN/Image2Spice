@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { LlmProvider } from "../types/schematic";
-import { checkLlmHealth } from "../lib/api";
+import { checkLlmHealth, fetchEnvKeys } from "../lib/api";
 
 interface LlmStatusProps {
   provider: LlmProvider;
@@ -10,6 +10,12 @@ interface LlmStatusProps {
 export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
   const [open, setOpen] = useState(false);
   const [online, setOnline] = useState<boolean | null>(null);
+  const [envKeys, setEnvKeys] = useState<Record<string, boolean>>({});
+
+  // Load which providers have .env keys on mount
+  useEffect(() => {
+    fetchEnvKeys().then(setEnvKeys);
+  }, []);
   const ref = useRef<HTMLDivElement>(null);
 
   const checkHealth = useCallback(() => {
@@ -20,10 +26,11 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
   }, [provider.provider]);
 
   const connectOpenRouter = useCallback(() => {
-    if (!provider.apiKey) return;
+    if (!provider.apiKey && !envKeys[provider.provider]) return;
     setOnline(null);
-    checkLlmHealth(provider.provider, provider.apiKey).then(setOnline);
-  }, [provider.provider, provider.apiKey]);
+    // If no frontend key but .env has one, call without key (backend uses .env)
+    checkLlmHealth(provider.provider, provider.apiKey || undefined).then(setOnline);
+  }, [provider.provider, provider.apiKey, envKeys]);
 
   // Auto-check for local only; reset status when switching providers
   useEffect(() => {
@@ -227,7 +234,14 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
           {provider.provider !== "local" && (
             <>
               <div>
-                <div style={{ marginBottom: 4, fontWeight: "bold", color: "var(--color-text)" }}>API Key</div>
+                <div style={{ marginBottom: 4, fontWeight: "bold", color: "var(--color-text)" }}>
+                  API Key
+                  {envKeys[provider.provider] && !provider.apiKey && (
+                    <span style={{ fontWeight: "normal", fontSize: 10, color: "var(--color-accent, #1976d2)", marginLeft: 8 }}>
+                      loaded from server .env
+                    </span>
+                  )}
+                </div>
                 <input
                   type="password"
                   value={provider.apiKey ?? ""}
@@ -236,6 +250,7 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
                     onProviderChange({ ...provider, apiKey: e.target.value });
                   }}
                   placeholder={
+                    envKeys[provider.provider] ? "Using server .env key" :
                     provider.provider === "openrouter" ? "sk-or-..." :
                     provider.provider === "openai" ? "sk-..." :
                     provider.provider === "claude" ? "sk-ant-..." : "API key"
@@ -254,16 +269,16 @@ export function LlmStatus({ provider, onProviderChange }: LlmStatusProps) {
               </div>
               <button
                 onClick={connectOpenRouter}
-                disabled={!provider.apiKey}
+                disabled={!provider.apiKey && !envKeys[provider.provider]}
                 style={{
                   padding: "6px 12px",
                   border: "none",
                   borderRadius: 4,
-                  background: provider.apiKey
+                  background: (provider.apiKey || envKeys[provider.provider])
                     ? "var(--color-accent, #1976d2)"
                     : "var(--color-border)",
-                  color: provider.apiKey ? "#fff" : "var(--color-text-muted)",
-                  cursor: provider.apiKey ? "pointer" : "default",
+                  color: (provider.apiKey || envKeys[provider.provider]) ? "#fff" : "var(--color-text-muted)",
+                  cursor: (provider.apiKey || envKeys[provider.provider]) ? "pointer" : "default",
                   fontSize: 12,
                   fontWeight: "bold",
                 }}

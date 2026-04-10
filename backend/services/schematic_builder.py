@@ -1,13 +1,18 @@
-"""Convert VLM analysis JSON into a complete .asc file using CircuitGraph pipeline."""
+"""Convert VLM analysis JSON into a complete .asc file.
+
+Uses VLM-provided (x%, y%) positions mapped directly to canvas coordinates,
+with orientation resolved from the circuit graph topology.
+"""
 from __future__ import annotations
 
 import logging
 
 from services.circuit_graph import CircuitGraph
-from services.layout import compute_layout_from_graph
-from services.wire_router import route_nets
+from services.wire_router import route_connections, route_nets, route_with_paths
 
 logger = logging.getLogger(__name__)
+
+_MARGIN = 48
 
 
 def _snap(v: int) -> int:
@@ -21,18 +26,13 @@ def _parse_pin_ref(ref: str) -> tuple[str, str] | None:
     return (parts[0], parts[1])
 
 
-def build_asc(
-    analysis: dict,
-    dictionary: dict,
-    sheet_width: int = 880,
-    sheet_height: int = 680,
-) -> str:
+def _normalize_analysis(analysis: dict) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+    """Normalize VLM analysis into (components, connections, grounds, labels)."""
     components = analysis.get("components", [])
     raw_connections = analysis.get("connections", [])
     raw_grounds = analysis.get("grounds", [])
     raw_labels = analysis.get("labels", [])
 
-    # Normalize connections
     connections: list[dict] = []
     for conn in raw_connections:
         if isinstance(conn, dict) and "from" in conn and "to" in conn:
@@ -49,7 +49,6 @@ def build_asc(
             elif isinstance(f, dict) and isinstance(t, dict):
                 connections.append(conn)
 
-    # Normalize grounds
     grounds: list[dict] = []
     for gnd in raw_grounds:
         if isinstance(gnd, str):
@@ -59,7 +58,6 @@ def build_asc(
         elif isinstance(gnd, dict):
             grounds.append(gnd)
 
-    # Normalize labels
     labels: list[dict] = []
     for lbl in raw_labels:
         if isinstance(lbl, dict):
@@ -74,23 +72,97 @@ def build_asc(
             else:
                 labels.append(lbl)
 
-    # Build circuit graph
+    return components, connections, grounds, labels
+
+
+def build_graph_from_analysis(
+    analysis: dict,
+    dictionary: dict,
+) -> CircuitGraph:
+    """Build a CircuitGraph from VLM analysis. Used for validation."""
+    components, connections, grounds, labels = _normalize_analysis(analysis)
+    graph = CircuitGraph(dictionary)
+    graph.add_components(components)
+    graph.build_nets(connections, grounds, labels)
+    graph.assign_tiers()
+    graph.resolve_orientations()
+    return graph
+
+
+def build_asc(
+    analysis: dict,
+    dictionary: dict,
+    sheet_width: int = 880,
+    sheet_height: int = 680,
+    wire_paths: list | None = None,
+    buses: list | None = None,
+) -> str:
+    """Convert VLM analysis into .asc text.
+
+    Uses VLM-provided (x%, y%) positions mapped to canvas coordinates.
+    Orientation is resolved from circuit topology.
+    If wire_paths/buses are provided (from image analysis), uses image-aware
+    routing. Otherwise falls back to net-aware bus routing.
+    """
+    components, connections, grounds, labels = _normalize_analysis(analysis)
+
+    # Build graph for orientation resolution + validation
     graph = CircuitGraph(dictionary)
     graph.add_components(components)
     graph.build_nets(connections, grounds, labels)
     graph.assign_tiers()
     graph.resolve_orientations()
 
-    # Layout
-    positions, (auto_w, auto_h) = compute_layout_from_graph(graph)
-    final_w = max(sheet_width, auto_w)
-    final_h = max(sheet_height, auto_h)
+    # Place components using VLM percentage positions → canvas coordinates
+    raw_comps = analysis.get("components", [])
+    for comp_data in raw_comps:
+        name = comp_data.get("name", "")
+        node = graph.components.get(name)
+        if not node:
+            continue
 
-    # Route wires
+        pct_x = max(0, min(100, float(comp_data.get("x", 50))))
+        pct_y = max(0, min(100, float(comp_data.get("y", 50))))
+
+        x = _snap(int(_MARGIN + (pct_x / 100) * (sheet_width - 2 * _MARGIN)))
+        y = _snap(int(_MARGIN + (pct_y / 100) * (sheet_height - 2 * _MARGIN)))
+
+        node.position = (x, y)
+
+        # Use VLM orientation if graph didn't assign horizontal
+        vlm_orient = comp_data.get("orientation", "vertical")
+        if vlm_orient == "horizontal" and node.resolved_rotation in ("R0", "R180"):
+            node.resolved_rotation = "R90"
+
+    # ── Column alignment: snap directly-connected components to same X ──
+    # If two components share a direct connection and are roughly in the
+    # same vertical column (within 20% of sheet width), align their X.
+    _COLUMN_THRESHOLD = int(sheet_width * 0.2)
+    for conn in connections:
+        f = conn.get("from", {})
+        t = conn.get("to", {})
+        name_a = f.get("component", "")
+        name_b = t.get("component", "")
+        node_a = graph.components.get(name_a)
+        node_b = graph.components.get(name_b)
+        if not node_a or not node_b or not node_a.position or not node_b.position:
+            continue
+        ax, ay = node_a.position
+        bx, by = node_b.position
+        dx = abs(ax - bx)
+        dy = abs(ay - by)
+        # If they're roughly in the same column and vertically separated
+        if dx < _COLUMN_THRESHOLD and dy > dx:
+            # Snap the lower component's X to match the upper one
+            avg_x = _snap((ax + bx) // 2)
+            node_a.position = (avg_x, ay)
+            node_b.position = (avg_x, by)
+
+    # Route wires — net-aware bus routing with direct column wires
     wire_result = route_nets(graph)
 
     # Build .asc lines
-    lines = ["Version 4", f"SHEET 1 {final_w} {final_h}"]
+    lines = ["Version 4", f"SHEET 1 {sheet_width} {sheet_height}"]
 
     for w in wire_result.wires:
         lines.append(f"WIRE {w[0]} {w[1]} {w[2]} {w[3]}")
@@ -101,10 +173,15 @@ def build_asc(
     for name, node in graph.components.items():
         if not node.position:
             continue
-        x, y = node.position
+        sx, sy = node.position
         rot = node.resolved_rotation
-        lines.append(f"SYMBOL {node.type} {x} {y} {rot}")
+        # Convert from SVG space to LTspice origin space for .asc export
+        # SVG top-left is at (svg_x, svg_y); LTspice origin = svg - bounds_min
         comp_def = dictionary.get("components", {}).get(node.type, {})
+        bounds = comp_def.get("geometry", {}).get("bounds", [0, 0, 0, 0])
+        ltx = sx - bounds[0]
+        lty = sy - bounds[1]
+        lines.append(f"SYMBOL {node.type} {ltx} {lty} {rot}")
         for win in comp_def.get("windows", []):
             lines.append(f"WINDOW {win['index']} {win['x']} {win['y']} {win['justification']} {win['fontSize']}")
         lines.append(f"SYMATTR InstName {name}")

@@ -1,12 +1,14 @@
 import json
 import logging
+import os
 from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 from pydantic import ValidationError
 
-from services.vision import identify_components, read_directives, describe_layout, describe_wires
+from services.vision import identify_components, read_directives, describe_layout, describe_wires, analyze_schematic, validate_and_fix, describe_wire_paths
+from services.schematic_builder import build_asc, build_graph_from_analysis, _normalize_analysis
 from services.llm_client import OpenRouterError
 from services.layout import compute_layout
 from services.wire_router import compute_wires
@@ -29,14 +31,23 @@ def _require_image(file: UploadFile) -> None:
         raise HTTPException(400, "File must be an image")
 
 
+_ENV_KEYS = {
+    "openai": "OPENAI_API_KEY",
+    "claude": "CLAUDE_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+}
+
+
 def _parse_provider(provider_json: str) -> tuple[str, str | None, str | None]:
-    """Parse provider_json form field into (provider, api_key, model)."""
+    """Parse provider_json form field into (provider, api_key, model).
+    Falls back to environment variables if no API key provided."""
     config = json.loads(provider_json) if provider_json else {}
-    return (
-        config.get("provider", "local"),
-        config.get("apiKey"),
-        config.get("model"),
-    )
+    provider = config.get("provider", "local")
+    api_key = config.get("apiKey")
+    # Fall back to .env if no key from frontend
+    if not api_key and provider in _ENV_KEYS:
+        api_key = os.environ.get(_ENV_KEYS[provider])
+    return (provider, api_key, config.get("model"))
 
 
 @router.post("/identify")
@@ -188,6 +199,147 @@ async def wizard_wires(
 
     return {
         "wire_descriptions": wire_desc,
+        "wires": [{"x1": w[0], "y1": w[1], "x2": w[2], "y2": w[3]} for w in wire_result.wires],
+        "flags": wire_result.flags,
+    }
+
+
+@router.post("/generate-asc")
+async def wizard_generate_asc(
+    file: UploadFile = File(...),
+    provider_json: str = Form("{}"),
+    sheet_json: str = Form("{}"),
+):
+    """Multi-pass: VLM analyzes image → validate → fix if needed → build .asc."""
+    _require_image(file)
+    image_bytes = await file.read()
+    provider, api_key, model = _parse_provider(provider_json)
+    sheet = json.loads(sheet_json) if sheet_json else {}
+    sheet_width = sheet.get("width", 880)
+    sheet_height = sheet.get("height", 680)
+
+    # Pass 1: Initial analysis
+    try:
+        analysis = await analyze_schematic(
+            image_bytes,
+            provider=provider,
+            api_key=api_key,
+            model=model,
+        )
+    except (httpx.HTTPError, httpx.TransportError) as exc:
+        raise HTTPException(400, detail={"error": "Cannot reach LLM provider.", "details": str(exc)})
+    except (ValueError, OpenRouterError) as exc:
+        logger.error("Analysis failed: %s", exc)
+        raise HTTPException(400, detail={"error": "Schematic analysis failed", "details": str(exc)})
+
+    dictionary = _load_dictionary()
+
+    # Validate pass 1
+    try:
+        graph = build_graph_from_analysis(analysis, dictionary)
+        issues = graph.validate()
+        logger.info("Pass 1 validation: %d components, %d nets, all_connected=%s, unconnected=%s",
+                     issues["component_count"], issues["net_count"],
+                     issues["all_connected"], issues["unconnected_pins"])
+    except Exception as exc:
+        logger.error("Validation failed: %s", exc, exc_info=True)
+        issues = {"all_connected": True}  # Skip pass 2 if validation itself fails
+
+    # Pass 2: If issues found, ask VLM to fix
+    if not issues.get("all_connected", True):
+        logger.info("Pass 2: Requesting VLM correction for %d unconnected pins",
+                     len(issues.get("unconnected_pins", [])))
+        try:
+            corrected = await validate_and_fix(
+                image_bytes, analysis, issues,
+                provider=provider, api_key=api_key, model=model,
+            )
+            # Use corrected analysis if it has components
+            if corrected.get("components"):
+                analysis = corrected
+                logger.info("Pass 2: Got corrected analysis with %d components, %d connections",
+                            len(corrected.get("components", [])),
+                            len(corrected.get("connections", [])))
+        except Exception as exc:
+            logger.warning("Pass 2 correction failed, using pass 1: %s", exc)
+
+    # Extract normalized connections
+    _, norm_conns, norm_grounds, norm_labels = _normalize_analysis(analysis)
+
+    # Build final .asc
+    try:
+        asc_text = build_asc(analysis, dictionary, sheet_width, sheet_height)
+    except Exception as exc:
+        logger.error("ASC build failed: %s", exc, exc_info=True)
+        raise HTTPException(400, detail={"error": "ASC generation failed", "details": str(exc)})
+
+    return {
+        "asc": asc_text,
+        "connections": norm_conns,
+        "grounds": norm_grounds,
+        "labels": norm_labels,
+    }
+
+
+@router.post("/redraw-wires")
+async def wizard_redraw_wires(
+    schematic_json: str = Form("{}"),
+):
+    """Re-route wires for current component positions without calling the VLM.
+
+    Accepts a schematic JSON with components (with positions) and the original
+    connection data. Rebuilds the circuit graph from the provided positions,
+    re-runs wire routing, and returns updated wires + flags.
+    """
+    data = json.loads(schematic_json) if schematic_json else {}
+    components = data.get("components", [])
+    connections = data.get("connections", [])
+    grounds = data.get("grounds", [])
+    labels = data.get("labels", [])
+
+    dictionary = _load_dictionary()
+
+    from services.circuit_graph import CircuitGraph
+    from services.wire_router import route_nets
+
+    graph = CircuitGraph(dictionary)
+    graph.add_components([
+        {"name": c["instanceName"], "type": c["type"], "value": c.get("value", "1")}
+        for c in components
+    ])
+
+    # Normalize connections
+    norm_conns: list[dict] = []
+    for conn in connections:
+        f = conn.get("from", {})
+        t = conn.get("to", {})
+        if isinstance(f, dict) and isinstance(t, dict):
+            norm_conns.append(conn)
+
+    norm_grounds: list[dict] = []
+    for gnd in grounds:
+        if isinstance(gnd, dict):
+            norm_grounds.append(gnd)
+
+    norm_labels: list[dict] = []
+    for lbl in labels:
+        if isinstance(lbl, dict):
+            norm_labels.append(lbl)
+
+    graph.build_nets(norm_conns, norm_grounds, norm_labels)
+
+    # Set positions from the provided component data (user may have dragged them)
+    for c in components:
+        name = c["instanceName"]
+        if name in graph.components:
+            node = graph.components[name]
+            node.position = (c["position"]["x"], c["position"]["y"])
+            node.resolved_rotation = c.get("rotation", "R0")
+
+    # Route wires using net-aware bus routing with direct column wires
+    wire_result = route_nets(graph)
+
+    return {
         "wires": [{"x1": w[0], "y1": w[1], "x2": w[2], "y2": w[3]} for w in wire_result.wires],
         "flags": wire_result.flags,
     }

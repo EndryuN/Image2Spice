@@ -28,7 +28,7 @@ export function ScreenshotPanel({ imageUrl, onUpload }: ScreenshotPanelProps) {
       e.stopPropagation();
       setDragging(false);
       const file = e.dataTransfer.files[0];
-      if (file && file.type.startsWith("image/") && onUpload) {
+      if (file && (file.type.startsWith("image/") || file.name.endsWith(".asc")) && onUpload) {
         onUpload(file);
       }
     },

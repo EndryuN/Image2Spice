@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import httpx
@@ -12,10 +13,29 @@ router = APIRouter(prefix="/api")
 
 DICTIONARY_DIR = Path(__file__).parent.parent.parent / "dictionary"
 
+_ENV_KEYS = {
+    "openai": "OPENAI_API_KEY",
+    "claude": "CLAUDE_API_KEY",
+    "openrouter": "OPENROUTER_API_KEY",
+}
+
+
+@router.get("/env-keys")
+async def env_keys():
+    """Return which providers have API keys configured in .env."""
+    available = {}
+    for provider, env_var in _ENV_KEYS.items():
+        key = os.environ.get(env_var, "")
+        available[provider] = bool(key)
+    return available
+
 
 @router.get("/llm-status")
 async def llm_status(provider: str = "local", api_key: str = ""):
     """Check if the LLM provider is reachable and authenticated."""
+    # Fall back to .env if no key provided
+    if not api_key and provider in _ENV_KEYS:
+        api_key = os.environ.get(_ENV_KEYS[provider], "")
     if provider == "local":
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:

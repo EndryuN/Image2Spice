@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg width="1187" height="594" version="1.1" viewBox="0 0 1187 594" xmlns="http://www.w3.org/2000/svg">
+ <rect width="1187" height="594" fill="#ffff63" stroke-width="3.0981"/>
+ <g fill="#fff" stroke-width="3">
+  <rect x="298.83" y="456" width="51" height="15"/>
+  <rect x="310.83" y="66" width="27" height="93"/>
+  <rect x="310.83" y="222" width="27" height="93"/>
+  <rect x="640.83" y="285" width="27" height="93"/>
+  <rect x="721.83" y="222" width="27" height="93"/>
+  <rect x="721.83" y="66" width="27" height="93"/>
+ </g>
+ <rect x="1060.8" y="366" width="27" height="78" fill="#ce8439" stroke-width="3"/>
+ <g font-family="Consolas" stroke-width="6" text-anchor="middle">
+  <g font-size="36px">
+   <text x="139.16945" y="37.895508" text-align="center" xml:space="preserve"><tspan x="139.16945" y="37.895508" stroke-width="6">9V<tspan font-size="12px"> </tspan>Battery<tspan font-size="12px"> </tspan>(+)</tspan></text>
+   <text x="1127.2197" y="486.83789" text-align="center" xml:space="preserve"><tspan x="1127.2197" y="486.83789" font-size="36px" stroke-width="6">spkr</tspan></text>
+   <text x="468.01074" y="128.68359" text-align="center" xml:space="preserve"><tspan x="468.01074" y="128.68359" font-size="36px" stroke-width="6">8</tspan></text>
+   <text x="544.9209" y="129" text-align="center" xml:space="preserve"><tspan x="544.9209" y="129" font-size="36px" stroke-width="6">4</tspan></text>
+   <text x="608.84668" y="194.68359" text-align="center" xml:space="preserve"><tspan x="608.84668" y="194.68359" font-size="36px" stroke-width="6">3</tspan></text>
+   <text x="474.2041" y="479.08008" text-align="center" xml:space="preserve"><tspan x="474.2041" y="479.08008" font-size="36px" stroke-width="6">1</tspan></text>
+   <text x="566.60059" y="478.97461" text-align="center" xml:space="preserve"><tspan x="566.60059" y="478.97461" font-size="36px" stroke-width="6">5</tspan></text>
+   <text x="366.13379" y="181.97461" text-align="center" xml:space="preserve"><tspan x="366.13379" y="181.97461" font-size="36px" stroke-width="6">7</tspan></text>
+   <text x="365.72949" y="341.68359" text-align="center" xml:space="preserve"><tspan x="365.72949" y="341.68359" font-size="36px" stroke-width="6">6</tspan></text>
+   <text x="366.14551" y="413.29102" text-align="center" xml:space="preserve"><tspan x="366.14551" y="413.29102" font-size="36px" stroke-width="6">2</tspan></text>
+   <text x="256.93848" y="482.68359" text-align="center" xml:space="preserve"><tspan x="256.93848" y="482.68359" font-size="36px" stroke-width="6">10u</tspan></text>
+  </g>
+  <g font-size="44.001px">
+   <text x="300.54196" y="448.31055" text-align="center" xml:space="preserve"><tspan x="300.54196" y="448.31055" font-size="44.001px" stroke-width="6">+</tspan></text>
+   <text x="1050.5419" y="265.31055" text-align="center" xml:space="preserve"><tspan x="1050.5419" y="265.31055" font-size="44.001px" stroke-width="6">+</tspan></text>
+   <text x="1044.5419" y="367.31055" text-align="center" xml:space="preserve"><tspan x="1044.5419" y="367.31055" font-size="44.001px" stroke-width="6">+</tspan></text>
+  </g>
+  <g font-size="28px">
+   <text transform="rotate(-90)" x="-333.8327" y="663.9137" text-align="center" xml:space="preserve"><tspan x="-333.8327" y="663.9137" font-size="28px" stroke-width="6">10k</tspan></text>
+   <text transform="rotate(-90)" x="-111.86584" y="745.07971" text-align="center" xml:space="preserve"><tspan x="-111.86584" y="745.07971" font-size="28px" stroke-width="6">10k</tspan></text>
+   <text transform="rotate(-90)" x="-270.90234" y="745.04199" text-align="center" xml:space="preserve"><tspan x="-270.90234" y="745.04199" font-size="28px" stroke-width="6">10k</tspan></text>
+  </g>
+ </g>
+ <g stroke-width="3">
+  <rect x="1090.8" y="381" width="3" height="3"/>
+  <rect x="1099.8" y="363" width="3" height="6"/>
+  <rect x="1096.8" y="369" width="3" height="6"/>
+  <rect x="1093.8" y="375" width="3" height="6"/>
+  <rect x="1108.8" y="357" width="3" height="96"/>
+  <rect x="1087.8" y="366" width="3" height="78"/>
+ </g>
+ <rect x="1072.8" y="309" width="3" height="48" stroke-width="1.315"/>
+ <g stroke-width="3">
+  <rect x="970.83" y="30" width="3.0162" height="105"/>
+  <rect x="961.83" y="450" width="3" height="57"/>
+  <rect x="895.83" y="450" width="3" height="111"/>
+  <rect x="1072.8" y="456" width="3" height="105"/>
+  <rect x="742.83" y="507" width="147" height="3"/>
+  <rect x="655.83" y="507" width="72" height="3"/>
+  <rect x="652.83" y="381" width="3" height="129"/>
+ </g>
+ <rect x="736.83" y="348" width="54" height="3" stroke-width="1.5236"/>
+ <rect x="736.83" y="381" width="54" height="3" stroke-width="1.5236"/>
+ <rect x="271.83" y="561" width="804" height="3" stroke-width="21.833"/>
+ <rect x="310.83" y="63" width="27" height="3" stroke-width=".98628"/>
+ <rect x="310.83" y="159" width="27" height="3" stroke-width=".98628"/>
+ <rect x="274.83" y="27" width="699.03" height="3" stroke-width="20.358"/>
+ <rect x="322.83" y="30" width="3" height="33" stroke-width="1.0904"/>
+ <rect x="322.83" y="162" width="3" height="57" stroke-width="1.433"/>
+ <rect x="322.83" y="318" width="3" height="132" stroke-width="2.1808"/>
+ <rect x="307.83" y="63" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="337.83" y="63" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="721.83" y="63.024" width="27" height="3" stroke-width=".98628"/>
+ <rect x="721.83" y="159.02" width="27" height="3" stroke-width=".98628"/>
+ <rect x="733.83" y="30" width="3" height="33" stroke-width="1.0904"/>
+ <rect x="733.83" y="162.02" width="3" height="57" stroke-width="1.433"/>
+ <rect x="718.83" y="63.024" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="748.83" y="63.024" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="310.83" y="219" width="27" height="3" stroke-width=".98628"/>
+ <rect x="310.83" y="315" width="27" height="3" stroke-width=".98628"/>
+ <rect x="307.83" y="219" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="337.83" y="219" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="292.83" y="450" width="63" height="6" stroke-width="1.1405"/>
+ <rect x="292.83" y="471" width="63" height="6" stroke-width="1.1405"/>
+ <rect x="292.83" y="456" width="6" height="15" stroke-width="1.1874"/>
+ <rect x="349.83" y="456" width="6" height="15" stroke-width="1.1874"/>
+ <rect x="292.83" y="486" width="63" height="6" stroke-width="1.2094"/>
+ <rect x="1042.8" y="267" width="63" height="6" stroke-width="1.1405"/>
+ <rect x="1042.8" y="288" width="63" height="6" stroke-width="1.1405"/>
+ <rect x="1042.8" y="273" width="6" height="15" stroke-width="1.1874"/>
+ <rect x="1099.8" y="273" width="6" height="15" stroke-width="1.1874"/>
+ <rect x="1042.8" y="303" width="63" height="6" stroke-width="1.2094"/>
+ <rect x="322.83" y="492" width="3" height="69" stroke-width="2.0163"/>
+ <g stroke-width="1.5236">
+  <rect x="325.83" y="189" width="54" height="3"/>
+  <rect x="736.83" y="189.02" width="54" height="3"/>
+  <rect x="325.83" y="348" width="54" height="3"/>
+  <rect x="325.83" y="381" width="54" height="3"/>
+ </g>
+ <rect x="382.83" y="138" width="207" height="309" fill="#f7a563" stroke="#000" stroke-width="6"/>
+ <rect x="793.83" y="138" width="207" height="309" fill="#f7a563" stroke="#000" stroke-width="6"/>
+ <g stroke-width="3">
+  <rect x="484.83" y="450" width="3" height="111"/>
+  <rect x="550.83" y="450" width="3" height="51"/>
+  <rect x="550.83" y="522" width="3" height="39"/>
+  <rect x="529.83" y="501" width="45" height="6"/>
+  <rect x="529.83" y="516" width="45" height="6"/>
+  <rect x="712.83" y="459" width="45" height="6"/>
+  <rect x="712.83" y="474" width="45" height="6"/>
+  <rect x="484.82" y="30" width="3.0162" height="105"/>
+  <rect x="559.8" y="30" width="3.0162" height="105"/>
+ </g>
+ <rect x="721.83" y="219" width="27" height="3" stroke-width=".98628"/>
+ <rect x="721.83" y="315" width="27" height="3" stroke-width=".98628"/>
+ <rect x="733.83" y="318" width="3" height="141" stroke-width="2.2539"/>
+ <rect x="718.83" y="219" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="748.83" y="219" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="640.83" y="282" width="27" height="3" stroke-width=".98628"/>
+ <rect x="640.83" y="378" width="27" height="3" stroke-width=".98628"/>
+ <rect x="637.83" y="282" width="3" height="99" stroke-width="1.8886"/>
+ <rect x="667.83" y="282" width="3" height="99" stroke-width="1.8886"/>
+ <g stroke-width="3">
+  <rect x="733.83" y="480" width="3" height="81"/>
+  <rect x="592.83" y="201" width="63" height="3"/>
+  <rect x="652.83" y="204" width="3" height="78"/>
+  <rect x="1003.8" y="201" width="72" height="3"/>
+  <rect x="1072.8" y="204" width="3" height="63"/>
+  <rect x="901.83" y="507" width="63" height="3"/>
+  <rect x="895.8" y="30" width="3.0162" height="105"/>
+  <rect x="1070.1" y="356.97" width="9" height="99"/>
+  <rect x="1057.8" y="363" width="33" height="3"/>
+  <rect x="1057.8" y="444" width="33" height="3"/>
+  <rect x="1057.8" y="366" width="3" height="78"/>
+  <rect x="1102.8" y="357" width="6" height="3"/>
+  <rect x="1102.8" y="360" width="3" height="3"/>
+  <rect transform="scale(1,-1)" x="1090.8" y="-429" width="3" height="3"/>
+  <rect transform="scale(1,-1)" x="1099.8" y="-447" width="3" height="6"/>
+  <rect transform="scale(1,-1)" x="1096.8" y="-441" width="3" height="6"/>
+  <rect transform="scale(1,-1)" x="1093.8" y="-435" width="3" height="6"/>
+  <rect transform="scale(1,-1)" x="1102.8" y="-453" width="6" height="3"/>
+  <rect transform="scale(1,-1)" x="1102.8" y="-450" width="3" height="3"/>
+ </g>
+ <g font-family="Consolas" stroke-width="6" text-anchor="middle">
+  <text transform="rotate(-90)" x="-113.16722" y="333.99219" font-size="28px" text-align="center" xml:space="preserve"><tspan x="-113.16722" y="333.99219" font-size="28px" stroke-width="6">1k</tspan></text>
+  <text transform="rotate(-90)" x="-267.9574" y="333.86914" font-size="28px" text-align="center" xml:space="preserve"><tspan x="-267.9574" y="333.86914" font-size="28px" stroke-width="6">68k</tspan></text>
+  <g font-size="36px">
+   <text x="879.01074" y="128.68359" text-align="center" xml:space="preserve"><tspan x="879.01074" y="128.68359" font-size="36px" stroke-width="6">8</tspan></text>
+   <text x="955.9209" y="129" text-align="center" xml:space="preserve"><tspan x="955.9209" y="129" font-size="36px" stroke-width="6">4</tspan></text>
+   <text x="1019.8467" y="194.68359" text-align="center" xml:space="preserve"><tspan x="1019.8467" y="194.68359" font-size="36px" stroke-width="6">3</tspan></text>
+   <text x="885.2041" y="480" text-align="center" xml:space="preserve"><tspan x="885.2041" y="480" font-size="36px" stroke-width="6">1</tspan></text>
+   <text x="977.60059" y="478.97461" text-align="center" xml:space="preserve"><tspan x="977.60059" y="478.97461" font-size="36px" stroke-width="6">5</tspan></text>
+   <text x="777.22168" y="181.95703" text-align="center" xml:space="preserve"><tspan x="777.22168" y="181.95703" font-size="36px" stroke-width="6">7</tspan></text>
+   <text x="776.81738" y="341.66602" text-align="center" xml:space="preserve"><tspan x="776.81738" y="341.66602" font-size="36px" stroke-width="6">6</tspan></text>
+   <text x="777.14551" y="413.29102" text-align="center" xml:space="preserve"><tspan x="777.14551" y="413.29102" font-size="36px" stroke-width="6">2</tspan></text>
+   <text x="1144.9385" y="302.68359" text-align="center" xml:space="preserve"><tspan x="1144.9385" y="302.68359" font-size="36px" stroke-width="6">10u</tspan></text>
+  </g>
+  <text x="613.91125" y="533.70319" font-size="32.001px" text-align="center" xml:space="preserve"><tspan x="613.91125" y="533.70319" font-size="32.001px" stroke-width="6">100n</tspan></text>
+  <text x="695.12976" y="449.71875" font-size="32.001px" text-align="center" xml:space="preserve"><tspan x="695.12976" y="449.71875" font-size="32.001px" stroke-width="6">100n</tspan></text>
+  <text x="485.62988" y="317.63672" font-size="63.999px" text-align="center" xml:space="preserve"><tspan x="485.62988" y="317.63672" font-size="63.999px" font-weight="bold" stroke-width="6">555</tspan></text>
+  <text x="896.77051" y="312.60934" font-size="63.999px" text-align="center" xml:space="preserve"><tspan x="896.77051" y="312.60934" font-size="63.999px" font-weight="bold" stroke-width="6">555</tspan></text>
+ </g>
+ <g fill="#f7a563" stroke-width="3">
+  <rect x="1090.8" y="384" width="18" height="42"/>
+  <rect x="1096.8" y="375" width="12" height="9"/>
+  <rect x="1099.8" y="369" width="9" height="6"/>
+  <rect x="1102.8" y="363" width="6" height="6"/>
+  <rect x="1105.8" y="360" width="3" height="3"/>
+  <rect x="1093.8" y="381" width="3" height="3"/>
+  <rect transform="scale(1,-1)" x="1096.8" y="-435" width="12" height="9"/>
+  <rect transform="scale(1,-1)" x="1099.8" y="-441" width="9" height="6"/>
+  <rect transform="scale(1,-1)" x="1102.8" y="-447" width="6" height="6"/>
+  <rect transform="scale(1,-1)" x="1105.8" y="-450" width="3" height="3"/>
+  <rect transform="scale(1,-1)" x="1093.8" y="-429" width="3" height="3"/>
+ </g>
+ <rect x="1048.8" y="273" width="51" height="15" fill="#fff" stroke-width="3"/>
+ <text x="1044.3285" y="469.47076" fill="#000000" font-family="Consolas" font-size="44.001px" stroke-width="6" text-align="center" text-anchor="middle" xml:space="preserve"><tspan x="1044.3285" y="469.47076" font-size="44.001px" stroke-width="6">-</tspan></text>
+ <text x="139.16945" y="571.89551" font-family="Consolas" font-size="36px" stroke-width="6" text-align="center" text-anchor="middle" xml:space="preserve"><tspan x="139.16945" y="571.89551" stroke-width="6">9V<tspan font-size="12px"> </tspan>Battery<tspan font-size="12px"> </tspan>(-)</tspan></text>
+</svg>

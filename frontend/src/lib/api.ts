@@ -15,6 +15,34 @@ export async function checkLlmHealth(provider: string, apiKey?: string): Promise
   }
 }
 
+export async function fetchEnvKeys(): Promise<Record<string, boolean>> {
+  try {
+    const resp = await fetch(`${BASE_URL}/env-keys`);
+    if (!resp.ok) return {};
+    return resp.json();
+  } catch {
+    return {};
+  }
+}
+
+export async function redrawWires(
+  schematicData: {
+    components: Array<{ instanceName: string; type: string; value: string; position: { x: number; y: number }; rotation: string }>;
+    connections: Array<{ from: { component: string; pin: string }; to: { component: string; pin: string } }>;
+    grounds: Array<{ component: string; pin: string }>;
+    labels: Array<{ component: string; pin: string; label: string }>;
+  },
+): Promise<{ wires: Array<{ x1: number; y1: number; x2: number; y2: number }>; flags: Array<{ name: string; x: number; y: number }> }> {
+  const formData = new FormData();
+  formData.append("schematic_json", JSON.stringify(schematicData));
+  const resp = await fetch(`${BASE_URL}/wizard/redraw-wires`, { method: "POST", body: formData });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? `Redraw failed: ${resp.status}`);
+  }
+  return resp.json();
+}
+
 export async function fetchDictionary(): Promise<Dictionary> {
   const resp = await fetch(`${BASE_URL}/dictionary`);
   if (!resp.ok) throw new Error(`Dictionary fetch failed: ${resp.status}`);
@@ -81,6 +109,24 @@ export async function wizardWires(
   if (!resp.ok) {
     const body = await resp.json().catch(() => null);
     throw new Error(body?.detail?.error ?? body?.detail ?? `Wires failed: ${resp.status}`);
+  }
+  return resp.json();
+}
+
+export async function wizardGenerateAsc(
+  file: File,
+  providerConfig?: LlmProvider,
+  sheet?: { width: number; height: number },
+  signal?: AbortSignal,
+): Promise<{ asc: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (providerConfig) formData.append("provider_json", JSON.stringify(providerConfig));
+  if (sheet) formData.append("sheet_json", JSON.stringify(sheet));
+  const resp = await fetch(`${BASE_URL}/wizard/generate-asc`, { method: "POST", body: formData, signal });
+  if (!resp.ok) {
+    const body = await resp.json().catch(() => null);
+    throw new Error(body?.detail?.error ?? body?.detail ?? `Generation failed: ${resp.status}`);
   }
   return resp.json();
 }

@@ -61,6 +61,17 @@ export function useSchematic() {
     [set]
   );
 
+  const loadSchematic = useCallback(
+    (s: Schematic) => {
+      set(s);
+    },
+    [set]
+  );
+
+  const clearSchematic = useCallback(() => {
+    set(structuredClone(EMPTY_SCHEMATIC));
+  }, [set]);
+
   const setSheet = useCallback(
     (width: number, height: number) => {
       set({ ...schematic, sheet: { width, height } });
@@ -149,6 +160,27 @@ export function useSchematic() {
     [schematic, set]
   );
 
+  const addWiresAndFlagsBatch = useCallback(
+    (wires: { from: Position; to: Position }[], flags: { name: string; pos: Position }[]) => {
+      const newWires = wires.map((w) => ({
+        id: genId(),
+        from: { x: snapToGrid(w.from.x), y: snapToGrid(w.from.y) },
+        to: { x: snapToGrid(w.to.x), y: snapToGrid(w.to.y) },
+      }));
+      const newFlags = flags.map((f) => ({
+        id: genId(),
+        name: f.name,
+        position: { x: snapToGrid(f.pos.x), y: snapToGrid(f.pos.y) },
+      }));
+      set({
+        ...schematic,
+        wires: [...schematic.wires, ...newWires],
+        flags: [...schematic.flags, ...newFlags],
+      });
+    },
+    [schematic, set]
+  );
+
   const deleteComponent = useCallback(
     (id: string) => {
       set({
@@ -180,6 +212,25 @@ export function useSchematic() {
     },
     [schematic, set]
   );
+
+  const deleteWires = useCallback(
+    (ids: string[]) => {
+      const idSet = new Set(ids);
+      set({
+        ...schematic,
+        wires: schematic.wires.filter((w) => !idSet.has(w.id)),
+      });
+    },
+    [schematic, set]
+  );
+
+  const clearAllWires = useCallback(() => {
+    set({
+      ...schematic,
+      wires: [],
+      flags: [],
+    });
+  }, [schematic, set]);
 
   const addFlag = useCallback(
     (name: string, pos: Position) => {
@@ -228,6 +279,8 @@ export function useSchematic() {
 
   return {
     schematic,
+    loadSchematic,
+    clearSchematic,
     setSheet,
     loadFromGenerateResponse,
     moveComponent,
@@ -238,8 +291,11 @@ export function useSchematic() {
     addWire,
     addWiresBatch,
     deleteWire,
+    deleteWires,
+    clearAllWires,
     addFlag,
     addFlagsBatch,
+    addWiresAndFlagsBatch,
     deleteFlag,
     toIR,
     undo,

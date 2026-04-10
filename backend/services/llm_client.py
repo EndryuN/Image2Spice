@@ -142,12 +142,15 @@ async def _call_openrouter(
                         "type": "image_url",
                         "image_url": {
                             "url": f"data:image/png;base64,{image_b64}",
+                            "detail": "high",
                         },
                     },
                 ],
             },
         ],
-        "temperature": 0.1,
+        "temperature": 0.0,
+        "top_p": 0.95,
+        "max_tokens": 16384,
         "stream": False,
     }
     headers = {
@@ -191,13 +194,15 @@ async def _call_openai(
                         "type": "image_url",
                         "image_url": {
                             "url": f"data:image/png;base64,{image_b64}",
+                            "detail": "high",
                         },
                     },
                 ],
             },
         ],
-        "temperature": 0.1,
-        "max_tokens": 4096,
+        "temperature": 0.0,
+        "top_p": 0.95,
+        "max_tokens": 16384,
     }
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -228,7 +233,7 @@ async def _call_claude(
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
     payload = {
         "model": model,
-        "max_tokens": 4096,
+        "max_tokens": 16384,
         "system": system_prompt,
         "messages": [
             {
