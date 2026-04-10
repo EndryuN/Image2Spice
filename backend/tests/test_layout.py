@@ -1,125 +1,100 @@
 import pytest
-from services.layout import compute_layout
+from services.circuit_graph import CircuitGraph
+from services.layout import compute_layout_from_graph
 
-COMPONENT_SIZES = {
-    "res": {"width": 32, "height": 80},
-    "voltage": {"width": 48, "height": 96},
-    "opamp2": {"width": 64, "height": 64},
+DICTIONARY = {
+    "components": {
+        "res": {
+            "pins": [
+                {"name": "A", "x": 16, "y": 16, "spiceOrder": 1},
+                {"name": "B", "x": 16, "y": 96, "spiceOrder": 2},
+            ],
+            "symbol": {"width": 32, "height": 80, "svgPath": ""},
+        },
+        "voltage": {
+            "pins": [
+                {"name": "+", "x": 0, "y": 16, "spiceOrder": 1},
+                {"name": "-", "x": 0, "y": 96, "spiceOrder": 2},
+            ],
+            "symbol": {"width": 64, "height": 80, "svgPath": ""},
+        },
+    }
 }
 
 
-def test_single_component_center():
-    layout_desc = [
-        {"instanceName": "U1", "region": "center", "nearby": []}
+def _make_graph(comps, conns, grounds=None, labels=None):
+    g = CircuitGraph(DICTIONARY)
+    g.add_components(comps)
+    g.build_nets(conns, grounds or [], labels or [])
+    g.assign_tiers()
+    g.resolve_orientations()
+    return g
+
+
+def test_canvas_auto_sizing():
+    comps = [
+        {"name": "V1", "type": "voltage", "value": "30V"},
+        {"name": "R1", "type": "res", "value": "2"},
+        {"name": "R2", "type": "res", "value": "8"},
+        {"name": "R3", "type": "res", "value": "1"},
+        {"name": "V2", "type": "voltage", "value": "10V"},
     ]
-    result = compute_layout(layout_desc, COMPONENT_SIZES, 880, 680)
-    assert result["U1"]["x"] == 432
-    assert result["U1"]["y"] == 336
-
-
-def test_two_components_regions():
-    layout_desc = [
-        {"instanceName": "R1", "region": "top-left", "nearby": []},
-        {"instanceName": "V1", "region": "bottom-right", "nearby": []},
+    conns = [
+        {"from": {"component": "V1", "pin": "+"}, "to": {"component": "R1", "pin": "A"}},
+        {"from": {"component": "R1", "pin": "A"}, "to": {"component": "R2", "pin": "A"}},
+        {"from": {"component": "R2", "pin": "A"}, "to": {"component": "R3", "pin": "A"}},
+        {"from": {"component": "R3", "pin": "A"}, "to": {"component": "V2", "pin": "+"}},
+        {"from": {"component": "V1", "pin": "-"}, "to": {"component": "R1", "pin": "B"}},
+        {"from": {"component": "R1", "pin": "B"}, "to": {"component": "R2", "pin": "B"}},
+        {"from": {"component": "R2", "pin": "B"}, "to": {"component": "R3", "pin": "B"}},
+        {"from": {"component": "R3", "pin": "B"}, "to": {"component": "V2", "pin": "-"}},
     ]
-    result = compute_layout(layout_desc, COMPONENT_SIZES, 880, 680)
-    assert result["R1"]["x"] < result["V1"]["x"]
-    assert result["R1"]["y"] < result["V1"]["y"]
-
-
-def test_nearby_above():
-    layout_desc = [
-        {"instanceName": "U1", "region": "center", "nearby": []},
-        {"instanceName": "R1", "region": "center", "nearby": [
-            {"name": "U1", "direction": "below"}
-        ]},
-    ]
-    result = compute_layout(layout_desc, COMPONENT_SIZES, 880, 680)
-    assert result["R1"]["y"] < result["U1"]["y"]
-
-
-def test_nearby_right():
-    layout_desc = [
-        {"instanceName": "U1", "region": "center", "nearby": []},
-        {"instanceName": "V1", "region": "center", "nearby": [
-            {"name": "U1", "direction": "left"}
-        ]},
-    ]
-    result = compute_layout(layout_desc, COMPONENT_SIZES, 880, 680)
-    assert result["V1"]["x"] > result["U1"]["x"]
+    graph = _make_graph(comps, conns)
+    positions, sheet = compute_layout_from_graph(graph)
+    assert sheet[0] >= 800
+    assert sheet[1] >= 600
 
 
 def test_grid_snap():
-    layout_desc = [
-        {"instanceName": "R1", "region": "center", "nearby": []}
+    comps = [{"name": "R1", "type": "res", "value": "1k"}]
+    graph = _make_graph(comps, [])
+    positions, sheet = compute_layout_from_graph(graph)
+    assert positions["R1"][0] % 16 == 0
+    assert positions["R1"][1] % 16 == 0
+
+
+def test_minimum_spacing():
+    comps = [
+        {"name": "R1", "type": "res", "value": "1k"},
+        {"name": "R2", "type": "res", "value": "2k"},
+        {"name": "R3", "type": "res", "value": "3k"},
     ]
-    result = compute_layout(layout_desc, COMPONENT_SIZES, 880, 680)
-    assert result["R1"]["x"] % 16 == 0
-    assert result["R1"]["y"] % 16 == 0
-
-
-COMPONENT_BOUNDS = {
-    "res": [0, 16, 32, 96],
-    "voltage": [-32, 16, 32, 96],
-    "opamp2": [-32, 32, 32, 96],
-    "cap": [0, 0, 32, 64],
-}
-
-
-def test_same_region_no_overlap():
-    """Three components in 'center' must not overlap."""
-    layout_desc = [
-        {"instanceName": "R1", "region": "center", "nearby": []},
-        {"instanceName": "R2", "region": "center", "nearby": []},
-        {"instanceName": "R3", "region": "center", "nearby": []},
+    conns = [
+        {"from": {"component": "R1", "pin": "A"}, "to": {"component": "R2", "pin": "A"}},
+        {"from": {"component": "R2", "pin": "A"}, "to": {"component": "R3", "pin": "A"}},
+        {"from": {"component": "R1", "pin": "B"}, "to": {"component": "R2", "pin": "B"}},
+        {"from": {"component": "R2", "pin": "B"}, "to": {"component": "R3", "pin": "B"}},
     ]
-    sizes = {k: {"width": b[2] - b[0], "height": b[3] - b[1], "bounds": b}
-             for k, b in COMPONENT_BOUNDS.items()}
-    result = compute_layout(layout_desc, sizes, 880, 680)
-    coords = [(result[n]["x"], result[n]["y"]) for n in ["R1", "R2", "R3"]]
-    # All three must be at distinct positions
-    assert len(set(coords)) == 3
+    graph = _make_graph(comps, conns)
+    positions, sheet = compute_layout_from_graph(graph)
+    names = list(positions.keys())
+    for i in range(len(names)):
+        for j in range(i + 1, len(names)):
+            xi, yi = positions[names[i]]
+            xj, yj = positions[names[j]]
+            dist = abs(xi - xj) + abs(yi - yj)
+            assert dist >= 128, f"{names[i]} and {names[j]} too close: {dist}"
 
 
-def test_collision_resolution_minimum_spacing():
-    """Components placed at the same spot must be pushed apart by at least 96px."""
-    layout_desc = [
-        {"instanceName": "R1", "region": "center", "nearby": []},
-        {"instanceName": "R2", "region": "center", "nearby": []},
+def test_parallel_components_same_y():
+    comps = [
+        {"name": "R1", "type": "res", "value": "1k"},
+        {"name": "R2", "type": "res", "value": "2k"},
     ]
-    sizes = {k: {"width": b[2] - b[0], "height": b[3] - b[1], "bounds": b}
-             for k, b in COMPONENT_BOUNDS.items()}
-    result = compute_layout(layout_desc, sizes, 880, 680)
-    r1, r2 = result["R1"], result["R2"]
-    dx = abs(r1["x"] - r2["x"])
-    dy = abs(r1["y"] - r2["y"])
-    # Must be separated in at least one axis by >= 96
-    assert dx >= 96 or dy >= 96
-
-
-def test_clamp_within_bounds():
-    """Even with collision pushes, all positions stay within sheet bounds."""
-    layout_desc = [
-        {"instanceName": f"R{i}", "region": "top-left", "nearby": []}
-        for i in range(6)
+    conns = [
+        {"from": {"component": "R1", "pin": "A"}, "to": {"component": "R2", "pin": "A"}},
+        {"from": {"component": "R1", "pin": "B"}, "to": {"component": "R2", "pin": "B"}},
     ]
-    sizes = {"res": {"width": 32, "height": 80, "bounds": [0, 16, 32, 96]}}
-    result = compute_layout(layout_desc, sizes, 880, 680)
-    for name, pos in result.items():
-        assert 32 <= pos["x"] <= 848, f"{name} x={pos['x']} out of bounds"
-        assert 32 <= pos["y"] <= 648, f"{name} y={pos['y']} out of bounds"
-
-
-def test_compaction_toward_center():
-    """Components spread across far corners should be pulled inward."""
-    layout_desc = [
-        {"instanceName": "R1", "region": "top-left", "nearby": []},
-        {"instanceName": "R2", "region": "bottom-right", "nearby": []},
-    ]
-    sizes = {"res": {"width": 32, "height": 80, "bounds": [0, 16, 32, 96]}}
-    result = compute_layout(layout_desc, sizes, 880, 680)
-    # Centroid should be closer to sheet center (440, 340) than corners
-    cx = (result["R1"]["x"] + result["R2"]["x"]) / 2
-    cy = (result["R1"]["y"] + result["R2"]["y"]) / 2
-    assert 200 < cx < 680
-    assert 150 < cy < 530
+    graph = _make_graph(comps, conns)
+    positions, _ = compute_layout_from_graph(graph)
+    assert positions["R1"][1] == positions["R2"][1]

@@ -1,25 +1,74 @@
 from __future__ import annotations
 
-REGION_COORDS = {
-    "top-left": (144, 112),
-    "top-center": (432, 112),
-    "top-right": (720, 112),
-    "center-left": (144, 336),
-    "center": (432, 336),
-    "center-right": (720, 336),
-    "bottom-left": (144, 544),
-    "bottom-center": (432, 544),
-    "bottom-right": (720, 544),
-}
+from typing import TYPE_CHECKING
 
-_MIN_SPACING = 96
-_MAX_COLLISION_ITERS = 50
-_MARGIN = 32
+if TYPE_CHECKING:
+    from services.circuit_graph import CircuitGraph
+
+TIER_SPACING = 160
+COMP_SPACING = 128
+MARGIN = 64
+GRID = 16
+MIN_WIDTH = 800
+MIN_HEIGHT = 600
 
 
 def _snap(value: int) -> int:
-    return round(value / 16) * 16
+    return round(value / GRID) * GRID
 
+
+def compute_layout_from_graph(
+    graph: "CircuitGraph",
+) -> tuple[dict[str, tuple[int, int]], tuple[int, int]]:
+    """Place components on a grid using tier information from the circuit graph.
+
+    Returns (positions dict mapping name->(x,y), sheet_size (width, height)).
+    Also sets node.position and tier.y_position on the graph objects.
+    """
+    positions: dict[str, tuple[int, int]] = {}
+
+    if not graph.components:
+        return positions, (MIN_WIDTH, MIN_HEIGHT)
+
+    if not graph.tiers:
+        # No tiers: place all components in a single row
+        names = list(graph.components.keys())
+        total_width = (len(names) - 1) * COMP_SPACING if len(names) > 1 else 0
+        width = max(MIN_WIDTH, MARGIN + total_width + MARGIN)
+        height = MIN_HEIGHT
+        start_x = (width - total_width) // 2
+        y = _snap(MARGIN)
+        for i, name in enumerate(names):
+            x = _snap(start_x + i * COMP_SPACING)
+            positions[name] = (x, y)
+            graph.components[name].position = (x, y)
+        return positions, (width, height)
+
+    # Find the maximum number of components in any tier
+    max_in_tier = max(len(tier.components) for tier in graph.tiers)
+    num_tiers = len(graph.tiers)
+
+    # Auto-size canvas
+    width = max(MIN_WIDTH, MARGIN + max_in_tier * COMP_SPACING + MARGIN)
+    height = max(MIN_HEIGHT, MARGIN + num_tiers * TIER_SPACING + MARGIN)
+
+    for tier in graph.tiers:
+        y = _snap(MARGIN + tier.index * TIER_SPACING)
+        tier.y_position = y
+
+        n = len(tier.components)
+        total_width = (n - 1) * COMP_SPACING if n > 1 else 0
+        start_x = (width - total_width) // 2
+
+        for i, name in enumerate(tier.components):
+            x = _snap(start_x + i * COMP_SPACING)
+            positions[name] = (x, y)
+            graph.components[name].position = (x, y)
+
+    return positions, (width, height)
+
+
+# ── Legacy wrapper ───────────────────────────────────────────────────────────
 
 def compute_layout(
     layout_desc: list[dict],
@@ -27,90 +76,15 @@ def compute_layout(
     sheet_width: int = 880,
     sheet_height: int = 680,
 ) -> dict[str, dict]:
+    """Legacy grid-based layout (no graph required)."""
     positions: dict[str, dict] = {}
-
-    # Check if we have percentage-based coordinates (new format)
-    has_coords = any(
-        "x" in item and "y" in item and item.get("x", 50) != 50 or item.get("y", 50) != 50
-        for item in layout_desc
-    )
-
-    if has_coords:
-        # ── New path: percentage coordinates → sheet coordinates ─────────
-        for item in layout_desc:
-            name = item["instanceName"]
-            pct_x = max(0, min(100, float(item.get("x", 50))))
-            pct_y = max(0, min(100, float(item.get("y", 50))))
-            x = int(_MARGIN + (pct_x / 100) * (sheet_width - 2 * _MARGIN))
-            y = int(_MARGIN + (pct_y / 100) * (sheet_height - 2 * _MARGIN))
-            rotation = item.get("rotation", "R0")
-            if rotation not in ("R0", "R90", "R180", "R270", "M0", "M90"):
-                rotation = "R0"
-            positions[name] = {"x": x, "y": y, "rotation": rotation}
-    else:
-        # ── Legacy path: region-based placement ──────────────────────────
-        region_groups: dict[str, list[str]] = {}
-        for item in layout_desc:
-            name = item["instanceName"]
-            region = item.get("region", "center")
-            region_groups.setdefault(region, []).append(name)
-
-        for region, names in region_groups.items():
-            base_x, base_y = REGION_COORDS.get(region, (432, 336))
-            count = len(names)
-            if count == 1:
-                positions[names[0]] = {"x": base_x, "y": base_y}
-            else:
-                cols = 1
-                while cols * cols < count:
-                    cols += 1
-                for i, name in enumerate(names):
-                    col = i % cols
-                    row = i // cols
-                    offset_x = (col - (cols - 1) / 2) * _MIN_SPACING
-                    offset_y = (row - (cols - 1) / 2) * _MIN_SPACING
-                    positions[name] = {
-                        "x": int(base_x + offset_x),
-                        "y": int(base_y + offset_y),
-                    }
-
-    # ── Collision resolution ─────────────────────────────────────────────
-    names_list = list(positions.keys())
-    for _ in range(_MAX_COLLISION_ITERS):
-        moved = False
-        for i in range(len(names_list)):
-            for j in range(i + 1, len(names_list)):
-                a, b = names_list[i], names_list[j]
-                ax, ay = positions[a]["x"], positions[a]["y"]
-                bx, by = positions[b]["x"], positions[b]["y"]
-                dx = abs(ax - bx)
-                dy = abs(ay - by)
-                if dx < _MIN_SPACING and dy < _MIN_SPACING:
-                    if dx <= dy:
-                        push = (_MIN_SPACING - dx) // 2 + 16
-                        if ax <= bx:
-                            positions[a]["x"] -= push
-                            positions[b]["x"] += push
-                        else:
-                            positions[a]["x"] += push
-                            positions[b]["x"] -= push
-                    else:
-                        push = (_MIN_SPACING - dy) // 2 + 16
-                        if ay <= by:
-                            positions[a]["y"] -= push
-                            positions[b]["y"] += push
-                        else:
-                            positions[a]["y"] += push
-                            positions[b]["y"] -= push
-                    moved = True
-        if not moved:
-            break
-
-    # ── Grid snap + clamp ────────────────────────────────────────────────
-    for name in positions:
-        positions[name]["x"] = _snap(positions[name]["x"])
-        positions[name]["y"] = _snap(positions[name]["y"])
-        positions[name]["x"] = max(_MARGIN, min(sheet_width - _MARGIN, positions[name]["x"]))
-        positions[name]["y"] = max(_MARGIN, min(sheet_height - _MARGIN, positions[name]["y"]))
-
+    cols = max(1, int(len(layout_desc) ** 0.5) + 1)
+    for i, item in enumerate(layout_desc):
+        name = item.get("instanceName", f"C{i}")
+        x = _snap(MARGIN + (i % cols) * COMP_SPACING)
+        y = _snap(MARGIN + (i // cols) * TIER_SPACING)
+        rotation = item.get("rotation", "R0")
+        if rotation not in ("R0", "R90", "R180", "R270", "M0", "M90"):
+            rotation = "R0"
+        positions[name] = {"x": x, "y": y, "rotation": rotation}
     return positions
