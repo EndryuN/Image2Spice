@@ -15,6 +15,7 @@ interface EditorProps {
   onMoveComponent: (id: string, pos: Position) => void;
   onAddWire: (from: Position, to: Position) => void;
   onSetSheet: (width: number, height: number) => void;
+  onToggleMode: () => void;
   mode: "select" | "wire";
   showGrid: boolean;
 }
@@ -29,6 +30,7 @@ export function Editor({
   onMoveComponent,
   onAddWire,
   onSetSheet,
+  onToggleMode,
   mode,
   showGrid,
 }: EditorProps) {
@@ -182,6 +184,12 @@ export function Editor({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      // Middle-click: toggle Select / Wire
+      if (e.button === 1) {
+        e.preventDefault();
+        onToggleMode();
+        return;
+      }
       // Right-click pan
       if (e.button === 2) {
         setPanning({
@@ -235,7 +243,7 @@ export function Editor({
         marqueeRef.current = m;
       }
     },
-    [mode, wirePhase, wireStart, wireCorner, svgPoint, snapPosition, computeCorner, onAddWire, onSelect, viewBox]
+    [mode, wirePhase, wireStart, wireCorner, svgPoint, snapPosition, computeCorner, onAddWire, onSelect, onToggleMode, viewBox]
   );
 
   const handleMouseMove = useCallback(

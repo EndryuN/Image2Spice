@@ -259,6 +259,7 @@ function App() {
           onMoveComponent={moveComponent}
           onAddWire={addWire}
           onSetSheet={setSheet}
+          onToggleMode={() => setMode((m) => (m === "select" ? "wire" : "select"))}
           mode={mode}
           showGrid={showGrid}
         />
