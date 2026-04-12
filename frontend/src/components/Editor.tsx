@@ -36,6 +36,8 @@ export function Editor({
 }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewBox, setViewBox] = useState({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
+  const targetViewBoxRef = useRef({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
+  const animRef = useRef<number | null>(null);
   const [dragging, setDragging] = useState<{
     id: string;
     offsetX: number;
@@ -182,6 +184,31 @@ export function Editor({
     [viewBox]
   );
 
+  const animateToTarget = useCallback(() => {
+    if (animRef.current != null) return; // already running
+    const step = () => {
+      setViewBox((v) => {
+        const t = targetViewBoxRef.current;
+        const nx = v.x + (t.x - v.x) * 0.2;
+        const ny = v.y + (t.y - v.y) * 0.2;
+        const nw = v.w + (t.w - v.w) * 0.2;
+        const nh = v.h + (t.h - v.h) * 0.2;
+        const done =
+          Math.abs(nw - t.w) < 0.01 &&
+          Math.abs(nh - t.h) < 0.01 &&
+          Math.abs(nx - t.x) < 0.01 &&
+          Math.abs(ny - t.y) < 0.01;
+        if (done) {
+          animRef.current = null;
+          return { x: t.x, y: t.y, w: t.w, h: t.h };
+        }
+        animRef.current = requestAnimationFrame(step);
+        return { x: nx, y: ny, w: nw, h: nh };
+      });
+    };
+    animRef.current = requestAnimationFrame(step);
+  }, []);
+
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
       // Middle-click: toggle Select / Wire
@@ -254,11 +281,10 @@ export function Editor({
         const rect = svg.getBoundingClientRect();
         const dx = ((e.clientX - panning.startX) / rect.width) * viewBox.w;
         const dy = ((e.clientY - panning.startY) / rect.height) * viewBox.h;
-        setViewBox((v) => ({
-          ...v,
-          x: panning.startVX - dx,
-          y: panning.startVY - dy,
-        }));
+        const nx = panning.startVX - dx;
+        const ny = panning.startVY - dy;
+        targetViewBoxRef.current = { ...targetViewBoxRef.current, x: nx, y: ny };
+        setViewBox((v) => ({ ...v, x: nx, y: ny }));
         return;
       }
       if (dragging) {
@@ -327,20 +353,33 @@ export function Editor({
 
   const zoomBy = useCallback(
     (factor: number) => {
-      setViewBox((v) => {
-        const cx = v.x + v.w / 2;
-        const cy = v.y + v.h / 2;
-        const newW = v.w * factor;
-        const newH = v.h * factor;
-        return { x: cx - newW / 2, y: cy - newH / 2, w: newW, h: newH };
-      });
+      const t = targetViewBoxRef.current;
+      const cx = t.x + t.w / 2;
+      const cy = t.y + t.h / 2;
+      const maxW = schematic.sheet.width * 20;
+      const minW = 64;
+      const newW = Math.max(minW, Math.min(maxW, t.w * factor));
+      const newH = t.h * (newW / t.w);
+      targetViewBoxRef.current = {
+        x: cx - newW / 2,
+        y: cy - newH / 2,
+        w: newW,
+        h: newH,
+      };
+      animateToTarget();
     },
-    []
+    [schematic.sheet.width, animateToTarget]
   );
 
   const zoomFit = useCallback(() => {
-    setViewBox({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
-  }, [schematic.sheet.width, schematic.sheet.height]);
+    targetViewBoxRef.current = {
+      x: -20,
+      y: -20,
+      w: schematic.sheet.width + 40,
+      h: schematic.sheet.height + 40,
+    };
+    animateToTarget();
+  }, [schematic.sheet.width, schematic.sheet.height, animateToTarget]);
 
   const startDrag = useCallback(
     (compId: string, e: React.MouseEvent) => {
@@ -359,10 +398,22 @@ export function Editor({
     [mode, schematic.components, svgPoint, onSelect]
   );
 
-  // Reset viewBox when sheet size changes
+  // Reset viewBox when sheet size changes (snap immediately, no animation)
   useEffect(() => {
-    setViewBox({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
+    const next = { x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 };
+    targetViewBoxRef.current = next;
+    setViewBox(next);
   }, [schematic.sheet.width, schematic.sheet.height]);
+
+  // Cancel any in-flight rAF animation on unmount
+  useEffect(() => {
+    return () => {
+      if (animRef.current != null) {
+        cancelAnimationFrame(animRef.current);
+        animRef.current = null;
+      }
+    };
+  }, []);
 
   // Keyboard: Escape cancels wire, Delete removes selected wire
   useEffect(() => {
