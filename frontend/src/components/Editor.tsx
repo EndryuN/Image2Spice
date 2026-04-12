@@ -427,6 +427,41 @@ export function Editor({
     };
   }, []);
 
+  // Cursor-anchored wheel zoom (native listener so preventDefault works)
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const rect = svg.getBoundingClientRect();
+      const t = targetViewBoxRef.current;
+
+      // Cursor position in SVG user coords (relative to target, not rendered)
+      const fracX = (e.clientX - rect.left) / rect.width;
+      const fracY = (e.clientY - rect.top) / rect.height;
+      const mx = fracX * t.w + t.x;
+      const my = fracY * t.h + t.y;
+
+      // Exponential factor — works for both mouse wheel and trackpad
+      const factor = Math.exp(e.deltaY * 0.0015);
+      const maxW = schematic.sheet.width * 20;
+      const minW = 64;
+      const newW = Math.max(minW, Math.min(maxW, t.w * factor));
+      const newH = t.h * (newW / t.w);
+
+      // Keep the cursor point fixed in screen space
+      const newX = mx - fracX * newW;
+      const newY = my - fracY * newH;
+
+      targetViewBoxRef.current = { x: newX, y: newY, w: newW, h: newH };
+      animateToTarget();
+    };
+
+    svg.addEventListener("wheel", handleWheel, { passive: false });
+    return () => svg.removeEventListener("wheel", handleWheel);
+  }, [schematic.sheet.width, animateToTarget]);
+
   // Keyboard: Escape cancels wire, Delete removes selected wire
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
