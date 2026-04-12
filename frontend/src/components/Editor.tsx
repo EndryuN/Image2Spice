@@ -36,6 +36,7 @@ export function Editor({
 }: EditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewBox, setViewBox] = useState({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
+  const viewBoxRef = useRef({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
   const targetViewBoxRef = useRef({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
   const animRef = useRef<number | null>(null);
   const [dragging, setDragging] = useState<{
@@ -187,24 +188,30 @@ export function Editor({
   const animateToTarget = useCallback(() => {
     if (animRef.current != null) return; // already running
     const step = () => {
-      setViewBox((v) => {
-        const t = targetViewBoxRef.current;
-        const nx = v.x + (t.x - v.x) * 0.2;
-        const ny = v.y + (t.y - v.y) * 0.2;
-        const nw = v.w + (t.w - v.w) * 0.2;
-        const nh = v.h + (t.h - v.h) * 0.2;
-        const done =
-          Math.abs(nw - t.w) < 0.01 &&
-          Math.abs(nh - t.h) < 0.01 &&
-          Math.abs(nx - t.x) < 0.01 &&
-          Math.abs(ny - t.y) < 0.01;
-        if (done) {
-          animRef.current = null;
-          return { x: t.x, y: t.y, w: t.w, h: t.h };
-        }
-        animRef.current = requestAnimationFrame(step);
-        return { x: nx, y: ny, w: nw, h: nh };
-      });
+      const v = viewBoxRef.current;
+      const t = targetViewBoxRef.current;
+      const nx = v.x + (t.x - v.x) * 0.2;
+      const ny = v.y + (t.y - v.y) * 0.2;
+      const nw = v.w + (t.w - v.w) * 0.2;
+      const nh = v.h + (t.h - v.h) * 0.2;
+      const done =
+        Math.abs(nw - t.w) < 0.01 &&
+        Math.abs(nh - t.h) < 0.01 &&
+        Math.abs(nx - t.x) < 0.01 &&
+        Math.abs(ny - t.y) < 0.01;
+
+      if (done) {
+        animRef.current = null;
+        const snapped = { x: t.x, y: t.y, w: t.w, h: t.h };
+        viewBoxRef.current = snapped;
+        setViewBox(snapped);
+        return;
+      }
+
+      const next = { x: nx, y: ny, w: nw, h: nh };
+      viewBoxRef.current = next;
+      setViewBox(next);
+      animRef.current = requestAnimationFrame(step);
     };
     animRef.current = requestAnimationFrame(step);
   }, []);
@@ -404,6 +411,11 @@ export function Editor({
     targetViewBoxRef.current = next;
     setViewBox(next);
   }, [schematic.sheet.width, schematic.sheet.height]);
+
+  // Mirror viewBox state into viewBoxRef so the rAF loop can read it synchronously
+  useEffect(() => {
+    viewBoxRef.current = viewBox;
+  }, [viewBox]);
 
   // Cancel any in-flight rAF animation on unmount
   useEffect(() => {
