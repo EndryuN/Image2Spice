@@ -12,3 +12,8 @@ frontend/node_modules/
 # Misc
 .claude/
 .env
+
+# Untrack /docs by default, but keep superpowers specs and plans
+/docs/
+!/docs/superpowers/
+!/docs/superpowers/**
