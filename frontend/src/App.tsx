@@ -6,14 +6,16 @@ import { PropertyPanel } from "./components/PropertyPanel";
 import { ComponentPalette } from "./components/ComponentPalette";
 import { ScreenshotPanel } from "./components/ScreenshotPanel";
 import { GenerateWizard } from "./components/GenerateWizard";
+import { StoppedScreen } from "./components/StoppedScreen";
 import { useSchematic } from "./hooks/useSchematic";
 import { useTheme } from "./hooks/useTheme";
-import { fetchDictionary, redrawWires } from "./lib/api";
+import { fetchDictionary, redrawWires, apiShutdown } from "./lib/api";
 import { generateAsc } from "./lib/ascGenerator";
 import { parseAsc } from "./lib/ascParser";
 import type { Dictionary, LlmProvider } from "./types/schematic";
 
 function App() {
+  const [stopped, setStopped] = useState(false);
   const [dictionary, setDictionary] = useState<Dictionary | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -199,6 +201,19 @@ function App() {
     }
   }, [connectionData, schematic, loadSchematic]);
 
+  const handleExit = async () => {
+    try {
+      await apiShutdown();
+    } catch {
+      // Backend may already be down — treat as successful exit
+    }
+    setStopped(true);
+  };
+
+  if (stopped) {
+    return <StoppedScreen />;
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--bg-panel)", color: "var(--color-text)" }}>
       <Toolbar
@@ -220,6 +235,7 @@ function App() {
         onToggleTheme={toggleTheme}
         llmProvider={llmProvider}
         onProviderChange={setLlmProvider}
+        onExit={handleExit}
       />
       <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
         {/* Collapsible palette */}
