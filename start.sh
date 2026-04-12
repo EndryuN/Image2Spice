@@ -56,4 +56,12 @@ elif command -v open &>/dev/null; then
     open http://localhost:5173
 fi
 
-wait
+# Wait specifically on the backend. If backend dies (Ctrl+C OR /api/shutdown
+# triggered SIGTERM from inside the process), tear down the frontend too.
+wait $BACKEND_PID 2>/dev/null || true
+echo
+echo "Backend stopped — shutting down frontend..."
+kill $FRONTEND_PID 2>/dev/null || true
+wait $FRONTEND_PID 2>/dev/null || true
+echo "Stopped."
+exit 0
