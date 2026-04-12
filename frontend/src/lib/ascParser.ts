@@ -140,7 +140,6 @@ export function parseAsc(text: string, dictionary?: Dictionary | null): AscParse
       // TEXT x y justify fontSize content
       const match = line.match(/^TEXT\s+(-?\d+)\s+(-?\d+)\s+\S+\s+\d+\s+(!?)(.*)$/);
       if (match) {
-        const content = match[3] === "!" ? match[4] : match[4];
         // Restore the "." prefix for SPICE directives
         const finalContent = match[3] === "!" ? match[4] : match[4];
         texts.push({
