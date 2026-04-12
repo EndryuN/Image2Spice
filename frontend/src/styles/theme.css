@@ -14,6 +14,8 @@
   --color-grid: #cccccc;
   --color-border: #cccccc;
   --color-error: #cc0000;
+  --color-danger: #d32f2f;
+  --color-danger-hover: #b71c1c;
   --color-success: green;
   --color-button-bg: #ffffff;
   --color-button-active: #dddddd;
@@ -35,6 +37,8 @@
   --color-grid: #333333;
   --color-border: #444444;
   --color-error: #ff6666;
+  --color-danger: #ef5350;
+  --color-danger-hover: #f44336;
   --color-success: #66cc66;
   --color-button-bg: #3a3a3a;
   --color-button-active: #555555;
