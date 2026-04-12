@@ -154,3 +154,7 @@ export async function validateAsc(
   if (!resp.ok) throw new Error(`Validate failed: ${resp.status}`);
   return resp.json();
 }
+
+export async function apiShutdown(): Promise<void> {
+  await fetch(`${BASE_URL}/shutdown`, { method: "POST" });
+}
