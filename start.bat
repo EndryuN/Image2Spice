@@ -1,11 +1,12 @@
 @echo off
+setlocal
 echo Starting image2spice...
 echo.
 
-:: Check if Ollama is running (optional — OpenRouter can be used instead)
+:: Check if Ollama is running (optional — OpenRouter/OpenAI/Claude can be used instead)
 curl.exe -s --max-time 3 http://localhost:11434/api/tags >nul 2>&1
 if errorlevel 1 (
-    echo [*] Ollama is not running. You can use OpenRouter instead.
+    echo [*] Ollama is not running. You can use OpenRouter / OpenAI / Claude instead.
     echo     To use local models, start Ollama first: ollama serve
     echo.
 )
@@ -20,30 +21,53 @@ for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5173 " ^| findstr "LISTENIN
     taskkill /PID %%a /F >nul 2>&1
 )
 
-:: Start backend
+:: Start backend in background (same console — logs interleave)
 echo Starting backend on port 8000...
-start "image2spice-backend" cmd /c "cd /d %~dp0backend && python -m uvicorn main:app --port 8000"
+pushd "%~dp0backend"
+start /b "" cmd /c "python -m uvicorn main:app --port 8000"
+popd
 
-:: Wait for backend to be ready
+:: Wait for backend to come up
 timeout /t 3 /nobreak >nul
 
-:: Start frontend
+:: Start frontend in background (same console — logs interleave)
 echo Starting frontend on port 5173...
-start "image2spice-frontend" cmd /c "cd /d %~dp0frontend && npm run dev"
+pushd "%~dp0frontend"
+start /b "" cmd /c "npm run dev"
+popd
 
-:: Wait and open browser
+:: Wait for frontend
 timeout /t 3 /nobreak >nul
+
 echo.
 echo image2spice is running!
 echo   Backend:  http://localhost:8000
 echo   Frontend: http://localhost:5173
 echo.
-echo Opening browser...
-start http://localhost:5173
+echo Click "Exit" in the app or press Ctrl+C here to stop both servers.
 echo.
-echo Close this window to keep servers running, or press any key to stop them.
-pause >nul
 
-:: Cleanup
-taskkill /FI "WINDOWTITLE eq image2spice-backend" /F >nul 2>&1
-taskkill /FI "WINDOWTITLE eq image2spice-frontend" /F >nul 2>&1
+:: Open browser
+start "" http://localhost:5173
+
+:: Watcher loop — poll the backend port. When it stops listening,
+:: tear down the frontend and exit.
+:waitloop
+netstat -ano | findstr ":8000 " | findstr "LISTENING" >nul
+if errorlevel 1 goto cleanup
+timeout /t 2 /nobreak >nul
+goto waitloop
+
+:cleanup
+echo.
+echo Backend stopped — shutting down frontend...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":5173 " ^| findstr "LISTENING"') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+:: Defense: also kill anything still on 8000
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000 " ^| findstr "LISTENING"') do (
+    taskkill /PID %%a /F >nul 2>&1
+)
+echo Stopped.
+endlocal
+exit /b 0
