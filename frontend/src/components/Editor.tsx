@@ -182,8 +182,8 @@ export function Editor({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      // Middle-click pan
-      if (e.button === 1) {
+      // Right-click pan
+      if (e.button === 2) {
         setPanning({
           startX: e.clientX,
           startY: e.clientY,
@@ -518,6 +518,7 @@ export function Editor({
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <defs>
           <pattern id="grid" width={16} height={16} patternUnits="userSpaceOnUse">
