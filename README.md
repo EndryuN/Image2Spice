@@ -103,26 +103,6 @@ You're ready to run the app.
 
 ---
 
-## How It Works
-
-```
-Image -> Wizard (4 vision-model steps) -> SchematicIR -> deterministic generator -> .asc
-                                                |
-                                       SVG visual editor (review/adjust)
-                                                |
-                                          Export .asc
-```
-
-1. Upload an LTspice screenshot
-2. The wizard runs four vision-model steps: **Identify** components, read **Directives**, describe **Layout**, trace **Wires**
-3. A deterministic generator converts the intermediate representation to `.asc`
-4. Review and adjust in the visual editor — drag components, draw wires, edit properties
-5. Export the final `.asc` file and open it in LTspice
-
-![LTspice schematic example](preview.png)
-
----
-
 ## Quick Start (TL;DR)
 
 If you've already done first-time setup:
@@ -282,6 +262,26 @@ image2spice/
   start.sh                     # Linux/macOS launcher (single terminal)
   .env.example                 # Provider key template (copy to .env)
 ```
+
+---
+
+## How It Works
+
+```
+Image -> Wizard (4 vision-model steps) -> SchematicIR -> deterministic generator -> .asc
+                                                |
+                                       SVG visual editor (review/adjust)
+                                                |
+                                          Export .asc
+```
+
+1. Upload an LTspice screenshot
+2. The wizard runs four vision-model steps: **Identify** components, read **Directives**, describe **Layout**, trace **Wires**
+3. A deterministic generator converts the intermediate representation to `.asc`
+4. Review and adjust in the visual editor — drag components, draw wires, edit properties
+5. Export the final `.asc` file and open it in LTspice
+
+![LTspice schematic example](preview.png)
 
 ---
 
