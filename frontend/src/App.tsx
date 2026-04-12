@@ -58,6 +58,8 @@ function App() {
     addWire,
     deleteWire,
     deleteWires,
+    rotateWires,
+    moveWires,
     clearAllWires,
     addFlag,
     deleteFlag,
@@ -274,6 +276,7 @@ function App() {
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
           onMoveComponent={moveComponent}
+          onMoveWires={moveWires}
           onAddWire={addWire}
           onSetSheet={setSheet}
           onToggleMode={() => setMode((m) => (m === "select" ? "wire" : "select"))}
@@ -292,6 +295,7 @@ function App() {
               onDeleteWire={deleteWire}
               onDeleteFlag={deleteFlag}
               onDeleteWires={deleteWires}
+              onRotateWires={rotateWires}
               onClearAllWires={clearAllWires}
             />
           </div>

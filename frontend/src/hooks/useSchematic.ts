@@ -224,6 +224,20 @@ export function useSchematic() {
     [schematic, set]
   );
 
+  const moveWires = useCallback(
+    (updates: Array<{ id: string; from: Position; to: Position }>) => {
+      const map = new Map(updates.map((u) => [u.id, u]));
+      set({
+        ...schematic,
+        wires: schematic.wires.map((w) => {
+          const u = map.get(w.id);
+          return u ? { ...w, from: u.from, to: u.to } : w;
+        }),
+      });
+    },
+    [schematic, set]
+  );
+
   const clearAllWires = useCallback(() => {
     set({
       ...schematic,
@@ -231,6 +245,36 @@ export function useSchematic() {
       flags: [],
     });
   }, [schematic, set]);
+
+  const rotateWires = useCallback(
+    (ids: string[], degrees: number = 45) => {
+      const idSet = new Set(ids);
+      const targets = schematic.wires.filter((w) => idSet.has(w.id));
+      if (targets.length === 0) return;
+      let cx = 0, cy = 0, n = 0;
+      for (const w of targets) {
+        cx += w.from.x + w.to.x;
+        cy += w.from.y + w.to.y;
+        n += 2;
+      }
+      cx /= n;
+      cy /= n;
+      const rad = (degrees * Math.PI) / 180;
+      const cos = Math.cos(rad);
+      const sin = Math.sin(rad);
+      const rot = (p: Position): Position => ({
+        x: snapToGrid(cx + (p.x - cx) * cos - (p.y - cy) * sin),
+        y: snapToGrid(cy + (p.x - cx) * sin + (p.y - cy) * cos),
+      });
+      set({
+        ...schematic,
+        wires: schematic.wires.map((w) =>
+          idSet.has(w.id) ? { ...w, from: rot(w.from), to: rot(w.to) } : w
+        ),
+      });
+    },
+    [schematic, set]
+  );
 
   const addFlag = useCallback(
     (name: string, pos: Position) => {
@@ -292,6 +336,8 @@ export function useSchematic() {
     addWiresBatch,
     deleteWire,
     deleteWires,
+    rotateWires,
+    moveWires,
     clearAllWires,
     addFlag,
     addFlagsBatch,

@@ -13,6 +13,7 @@ interface EditorProps {
   selectedIds: Set<string>;
   onSelect: (ids: Set<string>) => void;
   onMoveComponent: (id: string, pos: Position) => void;
+  onMoveWires: (updates: Array<{ id: string; from: Position; to: Position }>) => void;
   onAddWire: (from: Position, to: Position) => void;
   onSetSheet: (width: number, height: number) => void;
   onToggleMode: () => void;
@@ -28,6 +29,7 @@ export function Editor({
   selectedIds,
   onSelect,
   onMoveComponent,
+  onMoveWires,
   onAddWire,
   onSetSheet,
   onToggleMode,
@@ -50,6 +52,9 @@ export function Editor({
   const [wireStart, setWireStart] = useState<Position | null>(null);
   const [wireCorner, setWireCorner] = useState<Position | null>(null);
   const [cursorPos, setCursorPos] = useState<Position | null>(null);
+
+  const [wireDrag, setWireDrag] = useState<{ startX: number; startY: number } | null>(null);
+  const wireDragOrigsRef = useRef<Map<string, { from: Position; to: Position }> | null>(null);
 
   const [marquee, setMarquee] = useState<{ start: Position; end: Position } | null>(null);
   const marqueeRef = useRef<{ start: Position; end: Position } | null>(null);
@@ -326,6 +331,18 @@ export function Editor({
         });
         return;
       }
+      if (wireDrag && wireDragOrigsRef.current) {
+        const pos = svgPoint(e.clientX, e.clientY);
+        const dx = snapToGrid(pos.x) - wireDrag.startX;
+        const dy = snapToGrid(pos.y) - wireDrag.startY;
+        const updates = Array.from(wireDragOrigsRef.current.entries()).map(([id, orig]) => ({
+          id,
+          from: { x: orig.from.x + dx, y: orig.from.y + dy },
+          to: { x: orig.to.x + dx, y: orig.to.y + dy },
+        }));
+        onMoveWires(updates);
+        return;
+      }
       if (marqueeRef.current) {
         const pos = svgPoint(e.clientX, e.clientY);
         const m = { start: marqueeRef.current.start, end: pos };
@@ -339,12 +356,17 @@ export function Editor({
         setCursorPos(snapPosition(raw));
       }
     },
-    [panning, dragging, mode, svgPoint, snapPosition, onMoveComponent, viewBox, marquee]
+    [panning, dragging, wireDrag, mode, svgPoint, snapPosition, onMoveComponent, onMoveWires, viewBox, marquee]
   );
 
   const handleMouseUp = useCallback(() => {
     setDragging(null);
     setPanning(null);
+    if (wireDrag) {
+      setWireDrag(null);
+      wireDragOrigsRef.current = null;
+      return;
+    }
     const m = marqueeRef.current;
     if (m) {
       const x1 = Math.min(m.start.x, m.end.x);
@@ -380,7 +402,7 @@ export function Editor({
       setMarquee(null);
       marqueeRef.current = null;
     }
-  }, [schematic.wires, schematic.components, onSelect]);
+  }, [schematic.wires, schematic.components, onSelect, wireDrag]);
 
   const zoomBy = useCallback(
     (factor: number) => {
@@ -704,8 +726,19 @@ export function Editor({
                 x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
                 stroke="transparent"
                 strokeWidth={12}
+                onMouseDown={(e) => {
+                  if (mode === "select" && e.button === 0 && isWireSelected) {
+                    e.stopPropagation();
+                    const pos = svgPoint(e.clientX, e.clientY);
+                    const sx = snapToGrid(pos.x), sy = snapToGrid(pos.y);
+                    const selected = schematic.wires.filter((w) => selectedIds.has(w.id));
+                    wireDragOrigsRef.current = new Map(selected.map((w) => [w.id, { from: { ...w.from }, to: { ...w.to } }]));
+                    setWireDrag({ startX: sx, startY: sy });
+                  }
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (wireDrag) return;
                   if (e.shiftKey) {
                     const next = new Set(selectedIds);
                     if (next.has(wire.id)) next.delete(wire.id);
@@ -715,7 +748,7 @@ export function Editor({
                     onSelect(new Set([wire.id]));
                   }
                 }}
-                style={{ cursor: "pointer" }}
+                style={{ cursor: mode === "select" && isWireSelected ? "move" : "pointer" }}
               />
               {/* Visible wire */}
               <line

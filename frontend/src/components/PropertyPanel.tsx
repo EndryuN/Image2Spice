@@ -8,6 +8,7 @@ interface PropertyPanelProps {
   onDeleteWire: (id: string) => void;
   onDeleteFlag: (id: string) => void;
   onDeleteWires: (ids: string[]) => void;
+  onRotateWires: (ids: string[], degrees?: number) => void;
   onClearAllWires: () => void;
 }
 
@@ -19,6 +20,7 @@ export function PropertyPanel({
   onDeleteWire,
   onDeleteFlag,
   onDeleteWires,
+  onRotateWires,
   onClearAllWires,
 }: PropertyPanelProps) {
   if (selectedIds.size === 0) {
@@ -65,6 +67,12 @@ export function PropertyPanel({
             ))}
           </div>
           <button
+            onClick={() => onRotateWires(selectedWires.map((w) => w.id))}
+            style={{ padding: "4px 10px", border: "1px solid var(--color-border)", borderRadius: 4, background: "transparent", color: "var(--color-text)", cursor: "pointer", fontSize: 12 }}
+          >
+            Rotate 45°
+          </button>
+          <button
             onClick={() => onDeleteWires(selectedWires.map((w) => w.id))}
             style={{ color: "var(--color-error, red)", marginTop: 4, padding: "4px 10px", border: "1px solid var(--color-error, red)", borderRadius: 4, background: "transparent", cursor: "pointer", fontSize: 12 }}
           >
@@ -79,6 +87,12 @@ export function PropertyPanel({
       <div style={{ padding: 12, display: "flex", flexDirection: "column", gap: 8 }}>
         <h4 style={{ margin: 0, color: "var(--color-text)" }}>Wire</h4>
         <span style={{ fontSize: 12, color: "var(--color-text)" }}>({wire.from.x}, {wire.from.y}) to ({wire.to.x}, {wire.to.y})</span>
+        <button
+          onClick={() => onRotateWires([wire.id])}
+          style={{ padding: "4px 10px", border: "1px solid var(--color-border)", borderRadius: 4, background: "transparent", color: "var(--color-text)", cursor: "pointer", fontSize: 12 }}
+        >
+          Rotate 45°
+        </button>
         <button
           onClick={() => onDeleteWire(wire.id)}
           style={{ color: "var(--color-error, red)", marginTop: 4, padding: "4px 10px", border: "1px solid var(--color-error, red)", borderRadius: 4, background: "transparent", cursor: "pointer", fontSize: 12 }}

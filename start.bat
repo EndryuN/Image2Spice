@@ -3,6 +3,72 @@ setlocal
 echo Starting image2spice...
 echo.
 
+:: ── Dependency checks ────────────────────────────────────────────────
+echo Checking dependencies...
+
+:: Python
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Python is not installed or not in PATH.
+    echo         Download from https://www.python.org/downloads/
+    echo         Make sure to check "Add Python to PATH" during install.
+    pause
+    exit /b 1
+)
+for /f "tokens=2 delims= " %%v in ('python --version 2^>^&1') do set PYVER=%%v
+echo   [OK] Python %PYVER%
+
+:: Node.js
+node --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERROR] Node.js is not installed or not in PATH.
+    echo         Download the LTS installer from https://nodejs.org/
+    pause
+    exit /b 1
+)
+for /f "delims=" %%v in ('node --version') do set NODEVER=%%v
+echo   [OK] Node.js %NODEVER%
+
+:: Backend dependencies
+if not exist "%~dp0backend\requirements.txt" (
+    echo [ERROR] backend\requirements.txt not found. Are you in the right directory?
+    pause
+    exit /b 1
+)
+python -c "import fastapi, httpx, uvicorn" >nul 2>&1
+if errorlevel 1 (
+    echo [!] Backend Python packages not installed. Installing now...
+    pushd "%~dp0backend"
+    pip install -r requirements.txt
+    popd
+    if errorlevel 1 (
+        echo [ERROR] Failed to install backend dependencies.
+        pause
+        exit /b 1
+    )
+    echo   [OK] Backend dependencies installed
+) else (
+    echo   [OK] Backend dependencies
+)
+
+:: Frontend dependencies
+if not exist "%~dp0frontend\node_modules\" (
+    echo [!] Frontend packages not installed. Running npm install...
+    pushd "%~dp0frontend"
+    call npm install
+    popd
+    if errorlevel 1 (
+        echo [ERROR] Failed to install frontend dependencies.
+        pause
+        exit /b 1
+    )
+    echo   [OK] Frontend dependencies installed
+) else (
+    echo   [OK] Frontend dependencies
+)
+
+echo.
+
 :: Check if Ollama is running (optional — OpenRouter/OpenAI/Claude can be used instead)
 curl.exe -s --max-time 3 http://localhost:11434/api/tags >nul 2>&1
 if errorlevel 1 (
@@ -11,7 +77,7 @@ if errorlevel 1 (
     echo.
 )
 
-:: Kill any existing processes on ports 8000 and 5173
+:: ── Kill any existing processes on ports 8000 and 5173 ───────────────
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8000 " ^| findstr "LISTENING"') do (
     echo Killing existing process on port 8000 (PID %%a)
     taskkill /PID %%a /F >nul 2>&1

@@ -4,6 +4,105 @@ Convert LTspice circuit schematic screenshots into `.asc` files using a vision m
 
 ![image2spice in action](app-screenshot.png)
 
+## First-Time Setup
+
+### 1. Install Python 3.10+
+
+Check if you already have it:
+
+```bash
+python --version
+```
+
+If not installed:
+
+| Platform | Command |
+|----------|---------|
+| **Windows** | Download from [python.org/downloads](https://www.python.org/downloads/) — check **"Add Python to PATH"** during install |
+| **macOS** | `brew install python` |
+| **Ubuntu/Debian** | `sudo apt update && sudo apt install python3 python3-pip python3-venv` |
+| **Fedora** | `sudo dnf install python3 python3-pip` |
+| **Arch** | `sudo pacman -S python python-pip` |
+
+### 2. Install Node.js 18+
+
+Check if you already have it:
+
+```bash
+node --version
+```
+
+If not installed:
+
+| Platform | Command |
+|----------|---------|
+| **Windows** | Download the LTS installer from [nodejs.org](https://nodejs.org/) |
+| **macOS** | `brew install node` |
+| **Ubuntu/Debian** | `curl -fsSL https://deb.nodesource.com/setup_lts.x \| sudo -E bash - && sudo apt install -y nodejs` |
+| **Fedora** | `sudo dnf install nodejs` |
+| **Arch** | `sudo pacman -S nodejs npm` |
+
+### 3. Choose a vision provider
+
+Pick at least one:
+
+| Provider | Setup | Cost |
+|----------|-------|------|
+| **[Ollama](https://ollama.com/)** (local) | Install Ollama, then: `ollama pull qwen3-vl:8b` | Free (requires 8 GB+ VRAM GPU) |
+| **[OpenRouter](https://openrouter.ai/)** (cloud) | Sign up and get an API key | Free tier available |
+| **[OpenAI](https://platform.openai.com/)** (cloud) | Sign up and get an API key | Paid |
+| **[Claude](https://console.anthropic.com/)** (cloud) | Sign up and get an API key | Paid |
+
+### 4. Clone and install dependencies
+
+```bash
+git clone https://github.com/EndryuN/Image2Spice.git
+cd Image2Spice
+
+# Backend
+cd backend
+pip install -r requirements.txt
+cd ..
+
+# Frontend
+cd frontend
+npm install
+cd ..
+```
+
+### 5. (Optional) Set up API keys
+
+You can provide API keys in **either** of two ways — pick whichever you prefer:
+
+- **In the app:** click the provider status indicator in the toolbar and paste your key directly. Keys live in browser memory only and are never stored on disk.
+- **Via `.env` file:** copy the template and fill in one or more keys:
+
+```bash
+# Linux / macOS
+cp .env.example .env
+
+# Windows (cmd)
+copy .env.example .env
+```
+
+```
+OPENAI_API_KEY=
+CLAUDE_API_KEY=
+OPENROUTER_API_KEY=
+```
+
+If you only use **local Ollama**, you don't need any API keys — skip this step entirely.
+
+### 6. (Linux/macOS only) Make the launcher executable
+
+```bash
+chmod +x start.sh
+```
+
+You're ready to run the app.
+
+---
+
 ## How It Works
 
 ```
@@ -36,94 +135,32 @@ Both commands open one terminal, start backend + frontend, and open the app in y
 
 ---
 
-## Prerequisites
-
-- **[Python 3.10+](https://www.python.org/downloads/)** (for the backend)
-- **[Node.js 18+](https://nodejs.org/)** (for the frontend)
-- **One vision provider** (pick at least one):
-  - **[Ollama](https://ollama.com/)** — local, free, requires GPU. Pull the model: `ollama pull qwen3-vl:8b`
-  - **[OpenRouter](https://openrouter.ai/)** — cloud, free tier available, no GPU needed
-  - **[OpenAI](https://platform.openai.com/)** — cloud, paid
-  - **[Claude](https://console.anthropic.com/)** — cloud, paid
-
----
-
-## First-Time Setup
-
-Run these commands once after cloning the repo.
-
-### 1. (Optional) Set up API keys
-
-You can provide API keys in **either** of two ways — pick whichever you prefer:
-
-- **In the app:** click the provider status indicator in the toolbar and paste your key directly. Keys live in browser memory only and are never stored on disk.
-- **Via `.env` file:** copy the template and fill in one or more keys:
-
-```bash
-# Linux / macOS
-cp .env.example .env
-
-# Windows (cmd)
-copy .env.example .env
-```
-
-```
-OPENAI_API_KEY=
-CLAUDE_API_KEY=
-OPENROUTER_API_KEY=
-```
-
-If you only use **local Ollama**, you don't need any API keys — skip this step entirely.
-
-### 2. Install backend dependencies
-
-```bash
-cd backend
-pip install -r requirements.txt
-cd ..
-```
-
-### 3. Install frontend dependencies
-
-```bash
-cd frontend
-npm install
-cd ..
-```
-
-### 4. (Linux/macOS only) Make the launcher executable
-
-```bash
-chmod +x start.sh
-```
-
-You're ready to run the app.
-
----
-
 ## Running the App
 
-### Windows — one terminal (recommended)
+The launcher scripts (`start.bat` / `start.sh`) handle everything automatically:
+
+1. **Check dependencies** — verifies Python and Node.js are installed; exits with install instructions if not
+2. **Auto-install packages** — runs `pip install` / `npm install` if backend or frontend dependencies are missing
+3. **Check Ollama** — warns if Ollama isn't running (not required for cloud providers)
+4. **Free ports** — kills any existing processes on ports 8000 and 5173
+5. **Start backend** — launches the FastAPI server on port 8000
+6. **Start frontend** — launches the Vite dev server on port 5173
+7. **Open browser** — opens `http://localhost:5173` automatically
+8. **Watch for exit** — monitors the backend; when it stops (via Exit button or Ctrl+C), tears down the frontend too
+
+### Windows
 
 ```bash
 start.bat
 ```
 
-What to expect:
-- **One** cmd window opens. Backend and frontend logs interleave inside it — there are no extra child windows.
-- The app opens automatically at `http://localhost:5173`.
-- To stop: click the red **Exit** button in the toolbar, OR press `Ctrl+C` in the cmd window. Both servers tear down cleanly within ~3 seconds.
-
-### Linux / macOS — one terminal (recommended)
+### Linux / macOS
 
 ```bash
 ./start.sh
 ```
 
-What to expect:
-- One terminal session runs both backend and frontend with interleaved logs.
-- The app opens automatically at `http://localhost:5173` (via `xdg-open` on Linux, `open` on macOS).
-- To stop: click the red **Exit** button in the toolbar, OR press `Ctrl+C` in the terminal.
+Both run in a **single terminal** with interleaved logs. To stop: click the red **Exit** button in the toolbar, or press `Ctrl+C`.
 
 ### Manual (two terminals — for active development)
 
