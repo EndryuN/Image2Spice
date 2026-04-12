@@ -263,6 +263,22 @@ export function Editor({
           setWireCorner(corner);
           setWirePhase("second");
         } else if (wirePhase === "second" && wireCorner) {
+          // Click on existing wire → cancel second segment
+          const hitDist = 8;
+          const onWire = schematic.wires.some((w) => {
+            const dx = w.to.x - w.from.x, dy = w.to.y - w.from.y;
+            const len2 = dx * dx + dy * dy;
+            if (len2 === 0) return Math.hypot(raw.x - w.from.x, raw.y - w.from.y) < hitDist;
+            const t = Math.max(0, Math.min(1, ((raw.x - w.from.x) * dx + (raw.y - w.from.y) * dy) / len2));
+            return Math.hypot(raw.x - (w.from.x + t * dx), raw.y - (w.from.y + t * dy)) < hitDist;
+          });
+          if (onWire) {
+            setWireStart(null);
+            setWireCorner(null);
+            setWirePhase(null);
+            setCursorPos(null);
+            return;
+          }
           // Place second segment and finish
           const endPos = snapPosition(raw);
           if (endPos.x !== wireCorner.x || endPos.y !== wireCorner.y) {
@@ -688,19 +704,8 @@ export function Editor({
                 x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
                 stroke="transparent"
                 strokeWidth={12}
-                onMouseDown={(e) => {
-                  if (mode === "wire" && wirePhase === "second" && e.button === 0) {
-                    e.stopPropagation();
-                    setWireStart(null);
-                    setWireCorner(null);
-                    setWirePhase(null);
-                    setCursorPos(null);
-                    return;
-                  }
-                }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (mode === "wire") return;
                   if (e.shiftKey) {
                     const next = new Set(selectedIds);
                     if (next.has(wire.id)) next.delete(wire.id);
@@ -710,7 +715,7 @@ export function Editor({
                     onSelect(new Set([wire.id]));
                   }
                 }}
-                style={{ cursor: mode === "wire" ? "crosshair" : "pointer" }}
+                style={{ cursor: "pointer" }}
               />
               {/* Visible wire */}
               <line
