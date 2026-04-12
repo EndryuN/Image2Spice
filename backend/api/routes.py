@@ -1,5 +1,7 @@
+import asyncio
 import json
 import os
+import signal
 from pathlib import Path
 
 import httpx
@@ -163,3 +165,17 @@ def _dict_to_ir(data: dict) -> SchematicIR:
         ir.add_text(text["content"], int(pos["x"]), int(pos["y"]))
 
     return ir
+
+
+@router.post("/shutdown")
+async def shutdown():
+    """Gracefully stop the backend. Called by the frontend Exit button.
+
+    Schedules SIGTERM after the response flushes so the client receives
+    a 200 before the connection drops. Uvicorn handles SIGTERM as a
+    graceful shutdown; the launcher script's watcher loop notices the
+    PID is gone and tears down the frontend.
+    """
+    loop = asyncio.get_event_loop()
+    loop.call_later(0.1, lambda: os.kill(os.getpid(), signal.SIGTERM))
+    return {"shutting_down": True}
