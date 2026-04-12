@@ -52,7 +52,12 @@ Both commands open one terminal, start backend + frontend, and open the app in y
 
 Run these commands once after cloning the repo.
 
-### 1. Copy the environment template
+### 1. (Optional) Set up API keys
+
+You can provide API keys in **either** of two ways — pick whichever you prefer:
+
+- **In the app:** click the provider status indicator in the toolbar and paste your key directly. Keys live in browser memory only and are never stored on disk.
+- **Via `.env` file:** copy the template and fill in one or more keys:
 
 ```bash
 # Linux / macOS
@@ -62,15 +67,13 @@ cp .env.example .env
 copy .env.example .env
 ```
 
-Open `.env` in a text editor and fill in **at least one** provider key:
-
 ```
 OPENAI_API_KEY=
 CLAUDE_API_KEY=
 OPENROUTER_API_KEY=
 ```
 
-You can leave the others blank. (Local Ollama doesn't need a key — leave all three blank if you only use Ollama.)
+If you only use **local Ollama**, you don't need any API keys — skip this step entirely.
 
 ### 2. Install backend dependencies
 
