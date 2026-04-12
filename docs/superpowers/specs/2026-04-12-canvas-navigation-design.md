@@ -41,32 +41,38 @@ The existing `useEffect` at Editor.tsx:377 already clears wire state on mode cha
 
 ### 3. Smooth cursor-anchored wheel zoom
 
-**State additions:**
+**State / refs:**
 ```ts
-const [targetViewBox, setTargetViewBox] = useState(viewBox);
+const targetViewBoxRef = useRef(viewBox);  // ref, NOT state — avoids closure staleness in rAF loop
 const animRef = useRef<number | null>(null);
 ```
+
+Target viewBox is a ref so the rAF loop always reads the latest value, even if a new wheel event arrives mid-animation.
 
 **Wheel handler** (attached via `useEffect` + `addEventListener('wheel', handler, { passive: false })` so `preventDefault` works):
 
 1. `e.preventDefault()` to stop page scroll.
-2. Compute cursor SVG point from `targetViewBox` (not the rendered one — we stack zooms against the target).
+2. Compute cursor SVG point from `targetViewBoxRef.current` (not the rendered one — we stack zooms against the target).
 3. `factor = Math.exp(e.deltaY * 0.0015)` (positive deltaY = zoom out).
 4. Scale width/height by factor; shift x/y so the cursor point stays fixed.
 5. Clamp zoom: min width 64, max width `sheet.width * 20`.
-6. `setTargetViewBox(next)` and kick the animation loop if not running.
+6. Write the new box to `targetViewBoxRef.current` and kick the animation loop if not running.
 
 **Animation loop** (rAF):
 
 ```ts
 const step = () => {
   setViewBox(v => {
-    const t = targetViewBox;
+    const t = targetViewBoxRef.current;
     const nx = v.x + (t.x - v.x) * 0.2;
     const ny = v.y + (t.y - v.y) * 0.2;
     const nw = v.w + (t.w - v.w) * 0.2;
     const nh = v.h + (t.h - v.h) * 0.2;
-    const done = Math.abs(nw - t.w) < 0.01 && Math.abs(nh - t.h) < 0.01;
+    const done =
+      Math.abs(nw - t.w) < 0.01 &&
+      Math.abs(nh - t.h) < 0.01 &&
+      Math.abs(nx - t.x) < 0.01 &&
+      Math.abs(ny - t.y) < 0.01;
     if (done) { animRef.current = null; return t; }
     animRef.current = requestAnimationFrame(step);
     return { x: nx, y: ny, w: nw, h: nh };
@@ -74,9 +80,9 @@ const step = () => {
 };
 ```
 
-**Also route the `+`/`-`/`Fit` buttons and sheet-size reset through `setTargetViewBox`** so every zoom path eases consistently.
+**Also route the `+`/`-`/`Fit` buttons and sheet-size reset through `targetViewBoxRef` + the rAF loop** so every zoom path eases consistently.
 
-**Pan stays direct** — panning writes `viewBox` and `targetViewBox` together so the animation doesn't fight the drag.
+**Pan stays direct** — panning writes `viewBox` and `targetViewBoxRef.current` together so the animation doesn't fight the drag.
 
 ### 4. Cleanup
 
