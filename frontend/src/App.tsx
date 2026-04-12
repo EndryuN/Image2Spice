@@ -202,12 +202,13 @@ function App() {
   }, [connectionData, schematic, loadSchematic]);
 
   const handleExit = async () => {
+    if (stopped) return;
+    setStopped(true);
     try {
       await apiShutdown();
     } catch {
-      // Backend may already be down — treat as successful exit
+      // Backend may already be down
     }
-    setStopped(true);
   };
 
   if (stopped) {
