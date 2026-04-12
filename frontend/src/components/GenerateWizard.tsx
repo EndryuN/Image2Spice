@@ -55,6 +55,11 @@ export function GenerateWizard({
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
+  const handleCancel = useCallback(() => {
+    abortRef.current?.abort();
+    onClose();
+  }, [onClose]);
+
   // Auto-detect canvas size from image
   useEffect(() => {
     const img = new Image();
@@ -138,21 +143,21 @@ export function GenerateWizard({
       <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 2000, background: "var(--bg-panel)", border: "1px solid var(--color-border)", borderRadius: 24, padding: "8px 20px", display: "flex", alignItems: "center", gap: 12, boxShadow: "0 4px 16px rgba(0,0,0,0.25)" }}>
         <span style={{ fontSize: 13, color: "var(--color-text)" }}>Generating... {elapsed}s</span>
         <button onClick={() => setMinimized(false)} style={minBtnStyle}>Show</button>
-        <button onClick={onClose} style={minBtnStyle}>✕</button>
+        <button onClick={handleCancel} style={minBtnStyle}>✕</button>
       </div>
     );
   }
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 1500, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,0.45)" }}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      onClick={(e) => { if (e.target === e.currentTarget) handleCancel(); }}>
       <div style={{ background: "var(--bg-panel)", color: "var(--color-text)", border: "1px solid var(--color-border)", borderRadius: 8, width: 500, maxWidth: "95vw", maxHeight: "90vh", display: "flex", flexDirection: "column", boxShadow: "0 8px 32px rgba(0,0,0,0.35)" }}
         onClick={(e) => e.stopPropagation()}>
 
         <div style={{ display: "flex", alignItems: "center", padding: "10px 16px", borderBottom: "1px solid var(--color-border)", gap: 8 }}>
           <strong style={{ flex: 1, fontSize: 15 }}>Generate from Image</strong>
           {step === 2 && <button onClick={() => setMinimized(true)} style={headerBtnStyle}>—</button>}
-          <button onClick={onClose} style={headerBtnStyle}>✕</button>
+          <button onClick={handleCancel} style={headerBtnStyle}>✕</button>
         </div>
 
         <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
@@ -212,7 +217,7 @@ export function GenerateWizard({
             <button onClick={onClose} style={primaryBtnStyle}>Close</button>
           ) : (
             <>
-              <button onClick={onClose} style={secondaryBtnStyle} disabled={loading}>Cancel</button>
+              <button onClick={handleCancel} style={secondaryBtnStyle}>Cancel</button>
               {step === 1 && <button onClick={doGenerate} style={primaryBtnStyle}>Generate</button>}
             </>
           )}

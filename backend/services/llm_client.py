@@ -13,7 +13,17 @@ class OpenRouterError(Exception):
     """Error from OpenRouter API with status code."""
     def __init__(self, status_code: int, message: str):
         self.status_code = status_code
+        self.raw_message = message
         super().__init__(f"OpenRouter error ({status_code}): {message}")
+
+    @property
+    def is_auth_error(self) -> bool:
+        lower = self.raw_message.lower()
+        return (self.status_code == 401
+                or "api_key_invalid" in lower
+                or "api key not valid" in lower
+                or "invalid api key" in lower
+                or "invalid_api_key" in lower)
 
 OLLAMA_BASE_URL = "http://localhost:11434"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
@@ -102,7 +112,12 @@ async def _call_openrouter_with_retry(
                 return await _call_openrouter(try_model, system_prompt, user_prompt, image_bytes, api_key)
             except OpenRouterError as exc:
                 last_error = exc
-                if exc.status_code == 429:
+                if exc.is_auth_error:
+                    logger.error("API key invalid — not retrying other models")
+                    raise ValueError(
+                        "OpenRouter API key is invalid. Check your key in the LLM picker."
+                    ) from exc
+                elif exc.status_code == 429:
                     if attempt < _MAX_RETRIES - 1:
                         delay = _RETRY_DELAYS[attempt]
                         logger.warning("Rate limited on %s, retrying in %ds (attempt %d/%d)",
@@ -112,7 +127,7 @@ async def _call_openrouter_with_retry(
                         logger.warning("Rate limited on %s after %d retries, trying next model",
                                        try_model, _MAX_RETRIES)
                         break  # try next model
-                elif exc.status_code in (400, 401, 403, 404, 502, 503):
+                elif exc.status_code in (400, 403, 404, 502, 503):
                     logger.warning("Provider error %d on %s, trying next model",
                                    exc.status_code, try_model)
                     break  # try next model immediately

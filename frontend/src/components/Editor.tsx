@@ -224,8 +224,16 @@ export function Editor({
         onToggleMode();
         return;
       }
-      // Right-click pan
+      // Right-click: cancel wire drawing if active, otherwise pan
       if (e.button === 2) {
+        if (mode === "wire" && wirePhase) {
+          setWireStart(null);
+          setWireCorner(null);
+          setWirePhase(null);
+          setCursorPos(null);
+          e.preventDefault();
+          return;
+        }
         setPanning({
           startX: e.clientX,
           startY: e.clientY,
@@ -680,8 +688,19 @@ export function Editor({
                 x1={wire.from.x} y1={wire.from.y} x2={wire.to.x} y2={wire.to.y}
                 stroke="transparent"
                 strokeWidth={12}
+                onMouseDown={(e) => {
+                  if (mode === "wire" && wirePhase === "second" && e.button === 0) {
+                    e.stopPropagation();
+                    setWireStart(null);
+                    setWireCorner(null);
+                    setWirePhase(null);
+                    setCursorPos(null);
+                    return;
+                  }
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
+                  if (mode === "wire") return;
                   if (e.shiftKey) {
                     const next = new Set(selectedIds);
                     if (next.has(wire.id)) next.delete(wire.id);
@@ -691,7 +710,7 @@ export function Editor({
                     onSelect(new Set([wire.id]));
                   }
                 }}
-                style={{ cursor: "pointer" }}
+                style={{ cursor: mode === "wire" ? "crosshair" : "pointer" }}
               />
               {/* Visible wire */}
               <line
