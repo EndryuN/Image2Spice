@@ -21,6 +21,7 @@ interface ToolbarProps {
   onToggleTheme: () => void;
   llmProvider: LlmProvider;
   onProviderChange: (provider: LlmProvider) => void;
+  onExit: () => void;
 }
 
 export function Toolbar({
@@ -42,6 +43,7 @@ export function Toolbar({
   onToggleTheme,
   llmProvider,
   onProviderChange,
+  onExit,
 }: ToolbarProps) {
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -89,6 +91,21 @@ export function Toolbar({
       </button>
       <div style={{ flex: 1 }} />
       <LlmStatus provider={llmProvider} onProviderChange={onProviderChange} />
+      <div style={{ width: 1, height: 24, background: "var(--color-border)" }} />
+      <button
+        onClick={onExit}
+        title="Stop the backend and frontend servers"
+        style={{
+          background: "var(--color-danger)",
+          color: "white",
+          border: "none",
+          padding: "4px 12px",
+          borderRadius: 4,
+          cursor: "pointer",
+        }}
+      >
+        Exit
+      </button>
     </div>
   );
 }
