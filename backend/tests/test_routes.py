@@ -77,24 +77,30 @@ async def test_refine():
 async def test_shutdown_returns_shutting_down(monkeypatch):
     """POST /api/shutdown returns the shutdown signal and schedules SIGTERM."""
     import asyncio
+    import os
     import signal
 
     scheduled = []
+    kill_calls = []
 
-    def fake_call_later(delay, callback):
+    class _DummyHandle:
+        def cancel(self):
+            pass
+
+    def fake_call_later(delay, callback, *args):
         scheduled.append((delay, callback))
+        return _DummyHandle()
 
-    # Get the real event loop once before mocking, to avoid issues with httpx needing it
+    def fake_kill(pid, sig):
+        kill_calls.append((pid, sig))
+
+    # Replace call_later on the running loop with a recording stub.
     real_loop = asyncio.get_event_loop()
+    monkeypatch.setattr(real_loop, "call_later", fake_call_later)
 
-    # Create a wrapper that delegates to the real loop but captures call_later
-    original_call_later = real_loop.call_later
-
-    def mock_call_later(delay, callback):
-        scheduled.append((delay, callback))
-        return original_call_later(delay, callback)
-
-    monkeypatch.setattr(real_loop, "call_later", mock_call_later)
+    # Replace os.kill so that even if the callback IS invoked, no real
+    # signal is sent.
+    monkeypatch.setattr(os, "kill", fake_kill)
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -103,5 +109,10 @@ async def test_shutdown_returns_shutting_down(monkeypatch):
     assert resp.status_code == 200
     assert resp.json() == {"shutting_down": True}
     assert len(scheduled) == 1
-    delay, _callback = scheduled[0]
+
+    delay, callback = scheduled[0]
     assert delay == 0.1
+
+    # Invoke the captured callback and verify it sends SIGTERM to this process.
+    callback()
+    assert kill_calls == [(os.getpid(), signal.SIGTERM)]
