@@ -8,7 +8,7 @@ interface PropertyPanelProps {
   onDeleteWire: (id: string) => void;
   onDeleteFlag: (id: string) => void;
   onDeleteWires: (ids: string[]) => void;
-  onRotateWires: (ids: string[], degrees?: number) => void;
+  onRotateSelection: (ids: Set<string>, degrees?: number) => void;
   onClearAllWires: () => void;
 }
 
@@ -20,7 +20,7 @@ export function PropertyPanel({
   onDeleteWire,
   onDeleteFlag,
   onDeleteWires,
-  onRotateWires,
+  onRotateSelection,
   onClearAllWires,
 }: PropertyPanelProps) {
   if (selectedIds.size === 0) {
@@ -67,10 +67,10 @@ export function PropertyPanel({
             ))}
           </div>
           <button
-            onClick={() => onRotateWires(selectedWires.map((w) => w.id))}
+            onClick={() => onRotateSelection(new Set(selectedWires.map((w) => w.id)), 90)}
             style={{ padding: "4px 10px", border: "1px solid var(--color-border)", borderRadius: 4, background: "transparent", color: "var(--color-text)", cursor: "pointer", fontSize: 12 }}
           >
-            Rotate 45°
+            Rotate 90°
           </button>
           <button
             onClick={() => onDeleteWires(selectedWires.map((w) => w.id))}
@@ -88,10 +88,10 @@ export function PropertyPanel({
         <h4 style={{ margin: 0, color: "var(--color-text)" }}>Wire</h4>
         <span style={{ fontSize: 12, color: "var(--color-text)" }}>({wire.from.x}, {wire.from.y}) to ({wire.to.x}, {wire.to.y})</span>
         <button
-          onClick={() => onRotateWires([wire.id])}
+          onClick={() => onRotateSelection(new Set([wire.id]), 90)}
           style={{ padding: "4px 10px", border: "1px solid var(--color-border)", borderRadius: 4, background: "transparent", color: "var(--color-text)", cursor: "pointer", fontSize: 12 }}
         >
-          Rotate 45°
+          Rotate 90°
         </button>
         <button
           onClick={() => onDeleteWire(wire.id)}
@@ -133,6 +133,12 @@ export function PropertyPanel({
         </label>
         <label style={{ fontSize: 12, color: "var(--color-text-muted)" }}>X: {comp.position.x}, Y: {comp.position.y}</label>
         <button
+          onClick={() => onRotateSelection(new Set([comp.id]), 90)}
+          style={{ padding: "4px 10px", border: "1px solid var(--color-border)", borderRadius: 4, background: "transparent", color: "var(--color-text)", cursor: "pointer", fontSize: 12 }}
+        >
+          Rotate 90°
+        </button>
+        <button
           onClick={() => onDeleteComponent(comp.id)}
           style={{ color: "var(--color-error, red)", marginTop: 4, padding: "4px 10px", border: "1px solid var(--color-error, red)", borderRadius: 4, background: "transparent", cursor: "pointer", fontSize: 12 }}
         >
@@ -169,6 +175,12 @@ export function PropertyPanel({
         {selectedWires.length > 0 && <div>{selectedWires.length} wire(s)</div>}
         {selectedFlags.length > 0 && <div>{selectedFlags.length} flag(s)</div>}
       </div>
+      <button
+        onClick={() => onRotateSelection(selectedIds, 90)}
+        style={{ padding: "4px 10px", border: "1px solid var(--color-border)", borderRadius: 4, background: "transparent", color: "var(--color-text)", cursor: "pointer", fontSize: 12 }}
+      >
+        Rotate 90°
+      </button>
       {selectedWires.length > 0 && (
         <button
           onClick={() => onDeleteWires(selectedWires.map((w) => w.id))}

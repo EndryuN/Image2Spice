@@ -246,31 +246,89 @@ export function useSchematic() {
     });
   }, [schematic, set]);
 
-  const rotateWires = useCallback(
-    (ids: string[], degrees: number = 45) => {
-      const idSet = new Set(ids);
-      const targets = schematic.wires.filter((w) => idSet.has(w.id));
-      if (targets.length === 0) return;
-      let cx = 0, cy = 0, n = 0;
-      for (const w of targets) {
-        cx += w.from.x + w.to.x;
-        cy += w.from.y + w.to.y;
-        n += 2;
-      }
-      cx /= n;
-      cy /= n;
-      const rad = (degrees * Math.PI) / 180;
-      const cos = Math.cos(rad);
-      const sin = Math.sin(rad);
-      const rot = (p: Position): Position => ({
-        x: snapToGrid(cx + (p.x - cx) * cos - (p.y - cy) * sin),
-        y: snapToGrid(cy + (p.x - cx) * sin + (p.y - cy) * cos),
-      });
+  // Advance a component rotation string by N quarter-turns clockwise.
+  // LTspice rotations: R0→R90→R180→R270→R0 and M0→M90→M180→M270→M0.
+  const ROT_CW: Record<string, string> = {
+    R0: "R90", R90: "R180", R180: "R270", R270: "R0",
+    M0: "M90", M90: "M180", M180: "M270", M270: "M0",
+  };
+  const advanceRotation = (r: string, steps: number): string => {
+    let out = r;
+    for (let i = 0; i < steps; i++) out = ROT_CW[out] ?? out;
+    return out;
+  };
+
+  const rotateSelection = useCallback(
+    (ids: Set<string>, degrees: number = 90) => {
+      const steps = ((Math.round(degrees / 90) % 4) + 4) % 4;
+      if (steps === 0) return;
+      const comps = schematic.components.filter((c) => ids.has(c.id));
+      const wires = schematic.wires.filter((w) => ids.has(w.id));
+      const flags = schematic.flags.filter((f) => ids.has(f.id));
+      if (comps.length === 0 && wires.length === 0 && flags.length === 0) return;
+
+      // Centroid over all anchor points, snapped to grid so rotation stays on-grid.
+      const pts: Position[] = [];
+      for (const c of comps) pts.push(c.position);
+      for (const w of wires) { pts.push(w.from); pts.push(w.to); }
+      for (const f of flags) pts.push(f.position);
+      let sx = 0, sy = 0;
+      for (const p of pts) { sx += p.x; sy += p.y; }
+      const cx = snapToGrid(sx / pts.length);
+      const cy = snapToGrid(sy / pts.length);
+
+      const rot = (p: Position): Position => {
+        let dx = p.x - cx, dy = p.y - cy;
+        for (let i = 0; i < steps; i++) {
+          const ndx = -dy;
+          const ndy = dx;
+          dx = ndx; dy = ndy;
+        }
+        return { x: snapToGrid(cx + dx), y: snapToGrid(cy + dy) };
+      };
+
       set({
         ...schematic,
-        wires: schematic.wires.map((w) =>
-          idSet.has(w.id) ? { ...w, from: rot(w.from), to: rot(w.to) } : w
+        components: schematic.components.map((c) =>
+          ids.has(c.id)
+            ? { ...c, position: rot(c.position), rotation: advanceRotation(c.rotation, steps) }
+            : c
         ),
+        wires: schematic.wires.map((w) =>
+          ids.has(w.id) ? { ...w, from: rot(w.from), to: rot(w.to) } : w
+        ),
+        flags: schematic.flags.map((f) =>
+          ids.has(f.id) ? { ...f, position: rot(f.position) } : f
+        ),
+      });
+    },
+    [schematic, set]
+  );
+
+  const moveSelection = useCallback(
+    (updates: {
+      components?: Array<{ id: string; position: Position }>;
+      wires?: Array<{ id: string; from: Position; to: Position }>;
+      flags?: Array<{ id: string; position: Position }>;
+    }) => {
+      const cMap = new Map((updates.components ?? []).map((u) => [u.id, u.position]));
+      const wMap = new Map((updates.wires ?? []).map((u) => [u.id, u]));
+      const fMap = new Map((updates.flags ?? []).map((u) => [u.id, u.position]));
+      if (cMap.size === 0 && wMap.size === 0 && fMap.size === 0) return;
+      set({
+        ...schematic,
+        components: schematic.components.map((c) => {
+          const p = cMap.get(c.id);
+          return p ? { ...c, position: p } : c;
+        }),
+        wires: schematic.wires.map((w) => {
+          const u = wMap.get(w.id);
+          return u ? { ...w, from: u.from, to: u.to } : w;
+        }),
+        flags: schematic.flags.map((f) => {
+          const p = fMap.get(f.id);
+          return p ? { ...f, position: p } : f;
+        }),
       });
     },
     [schematic, set]
@@ -336,7 +394,8 @@ export function useSchematic() {
     addWiresBatch,
     deleteWire,
     deleteWires,
-    rotateWires,
+    rotateSelection,
+    moveSelection,
     moveWires,
     clearAllWires,
     addFlag,

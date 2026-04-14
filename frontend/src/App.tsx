@@ -51,15 +51,14 @@ function App() {
     loadSchematic,
     clearSchematic,
     setSheet,
-    moveComponent,
     updateComponent,
     addComponent,
     deleteComponent,
     addWire,
     deleteWire,
     deleteWires,
-    rotateWires,
-    moveWires,
+    rotateSelection,
+    moveSelection,
     clearAllWires,
     addFlag,
     deleteFlag,
@@ -275,8 +274,8 @@ function App() {
           dictionary={dictionary}
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
-          onMoveComponent={moveComponent}
-          onMoveWires={moveWires}
+          onMoveSelection={moveSelection}
+          onRotateSelection={rotateSelection}
           onAddWire={addWire}
           onSetSheet={setSheet}
           onToggleMode={() => setMode((m) => (m === "select" ? "wire" : "select"))}
@@ -295,7 +294,7 @@ function App() {
               onDeleteWire={deleteWire}
               onDeleteFlag={deleteFlag}
               onDeleteWires={deleteWires}
-              onRotateWires={rotateWires}
+              onRotateSelection={rotateSelection}
               onClearAllWires={clearAllWires}
             />
           </div>

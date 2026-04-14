@@ -12,8 +12,12 @@ interface EditorProps {
   dictionary: Dictionary | null;
   selectedIds: Set<string>;
   onSelect: (ids: Set<string>) => void;
-  onMoveComponent: (id: string, pos: Position) => void;
-  onMoveWires: (updates: Array<{ id: string; from: Position; to: Position }>) => void;
+  onMoveSelection: (updates: {
+    components?: Array<{ id: string; position: Position }>;
+    wires?: Array<{ id: string; from: Position; to: Position }>;
+    flags?: Array<{ id: string; position: Position }>;
+  }) => void;
+  onRotateSelection: (ids: Set<string>, degrees?: number) => void;
   onAddWire: (from: Position, to: Position) => void;
   onSetSheet: (width: number, height: number) => void;
   onToggleMode: () => void;
@@ -28,8 +32,8 @@ export function Editor({
   dictionary,
   selectedIds,
   onSelect,
-  onMoveComponent,
-  onMoveWires,
+  onMoveSelection,
+  onRotateSelection,
   onAddWire,
   onSetSheet,
   onToggleMode,
@@ -41,10 +45,14 @@ export function Editor({
   const viewBoxRef = useRef({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
   const targetViewBoxRef = useRef({ x: -20, y: -20, w: schematic.sheet.width + 40, h: schematic.sheet.height + 40 });
   const animRef = useRef<number | null>(null);
-  const [dragging, setDragging] = useState<{
-    id: string;
-    offsetX: number;
-    offsetY: number;
+  // Drag state for moving a selection (components + wires + flags).
+  // Start anchor is the cursor's snapped grid position at mousedown; snapshots
+  // hold original coordinates so per-frame deltas don't compound.
+  const [dragging, setDragging] = useState<{ startX: number; startY: number } | null>(null);
+  const dragSnapshotRef = useRef<{
+    components: Array<{ id: string; position: Position }>;
+    wires: Array<{ id: string; from: Position; to: Position }>;
+    flags: Array<{ id: string; position: Position }>;
   } | null>(null);
 
   // Wire drawing state machine: null → "first" → "second" → null
@@ -52,9 +60,6 @@ export function Editor({
   const [wireStart, setWireStart] = useState<Position | null>(null);
   const [wireCorner, setWireCorner] = useState<Position | null>(null);
   const [cursorPos, setCursorPos] = useState<Position | null>(null);
-
-  const [wireDrag, setWireDrag] = useState<{ startX: number; startY: number } | null>(null);
-  const wireDragOrigsRef = useRef<Map<string, { from: Position; to: Position }> | null>(null);
 
   const [marquee, setMarquee] = useState<{ start: Position; end: Position } | null>(null);
   const marqueeRef = useRef<{ start: Position; end: Position } | null>(null);
@@ -284,8 +289,8 @@ export function Editor({
             setCursorPos(null);
             return;
           }
-          // Place second segment and finish
-          const endPos = snapPosition(raw);
+          // Place second segment and finish — axis-snap from corner, matches first-segment behavior
+          const endPos = computeCorner(wireCorner, snapPosition(raw));
           if (endPos.x !== wireCorner.x || endPos.y !== wireCorner.y) {
             onAddWire(wireCorner, endPos);
           }
@@ -323,24 +328,26 @@ export function Editor({
         setViewBox((v) => ({ ...v, x: nx, y: ny }));
         return;
       }
-      if (dragging) {
+      if (dragging && dragSnapshotRef.current) {
         const pos = svgPoint(e.clientX, e.clientY);
-        onMoveComponent(dragging.id, {
-          x: snapToGrid(pos.x - dragging.offsetX),
-          y: snapToGrid(pos.y - dragging.offsetY),
+        const dx = snapToGrid(pos.x) - dragging.startX;
+        const dy = snapToGrid(pos.y) - dragging.startY;
+        const snap = dragSnapshotRef.current;
+        onMoveSelection({
+          components: snap.components.map((c) => ({
+            id: c.id,
+            position: { x: c.position.x + dx, y: c.position.y + dy },
+          })),
+          wires: snap.wires.map((w) => ({
+            id: w.id,
+            from: { x: w.from.x + dx, y: w.from.y + dy },
+            to: { x: w.to.x + dx, y: w.to.y + dy },
+          })),
+          flags: snap.flags.map((f) => ({
+            id: f.id,
+            position: { x: f.position.x + dx, y: f.position.y + dy },
+          })),
         });
-        return;
-      }
-      if (wireDrag && wireDragOrigsRef.current) {
-        const pos = svgPoint(e.clientX, e.clientY);
-        const dx = snapToGrid(pos.x) - wireDrag.startX;
-        const dy = snapToGrid(pos.y) - wireDrag.startY;
-        const updates = Array.from(wireDragOrigsRef.current.entries()).map(([id, orig]) => ({
-          id,
-          from: { x: orig.from.x + dx, y: orig.from.y + dy },
-          to: { x: orig.to.x + dx, y: orig.to.y + dy },
-        }));
-        onMoveWires(updates);
         return;
       }
       if (marqueeRef.current) {
@@ -356,17 +363,15 @@ export function Editor({
         setCursorPos(snapPosition(raw));
       }
     },
-    [panning, dragging, wireDrag, mode, svgPoint, snapPosition, onMoveComponent, onMoveWires, viewBox, marquee]
+    [panning, dragging, mode, svgPoint, snapPosition, onMoveSelection, viewBox, marquee]
   );
 
   const handleMouseUp = useCallback(() => {
+    const wasDragging = dragging !== null;
     setDragging(null);
+    dragSnapshotRef.current = null;
     setPanning(null);
-    if (wireDrag) {
-      setWireDrag(null);
-      wireDragOrigsRef.current = null;
-      return;
-    }
+    if (wasDragging) return;
     const m = marqueeRef.current;
     if (m) {
       const x1 = Math.min(m.start.x, m.end.x);
@@ -402,7 +407,7 @@ export function Editor({
       setMarquee(null);
       marqueeRef.current = null;
     }
-  }, [schematic.wires, schematic.components, onSelect, wireDrag]);
+  }, [schematic.wires, schematic.components, onSelect, dragging]);
 
   const zoomBy = useCallback(
     (factor: number) => {
@@ -438,17 +443,43 @@ export function Editor({
     (compId: string, e: React.MouseEvent) => {
       e.stopPropagation();
       if (mode === "wire") return; // Don't intercept clicks in wire mode
-      onSelect(new Set([compId]));
-      const comp = schematic.components.find((c) => c.id === compId);
-      if (!comp) return;
+
+      // Shift-click toggles membership; don't start a drag.
+      if (e.shiftKey) {
+        const next = new Set(selectedIds);
+        if (next.has(compId)) next.delete(compId);
+        else next.add(compId);
+        onSelect(next);
+        return;
+      }
+
+      // Determine the drag set: if the clicked component is already part of a
+      // multi-selection, drag the whole selection. Otherwise, select and drag
+      // just this component.
+      let ids: Set<string>;
+      if (selectedIds.has(compId) && selectedIds.size > 1) {
+        ids = selectedIds;
+      } else {
+        ids = new Set([compId]);
+        onSelect(ids);
+      }
+
       const pos = svgPoint(e.clientX, e.clientY);
-      setDragging({
-        id: compId,
-        offsetX: pos.x - comp.position.x,
-        offsetY: pos.y - comp.position.y,
-      });
+      const sx = snapToGrid(pos.x), sy = snapToGrid(pos.y);
+      dragSnapshotRef.current = {
+        components: schematic.components
+          .filter((c) => ids.has(c.id))
+          .map((c) => ({ id: c.id, position: { ...c.position } })),
+        wires: schematic.wires
+          .filter((w) => ids.has(w.id))
+          .map((w) => ({ id: w.id, from: { ...w.from }, to: { ...w.to } })),
+        flags: schematic.flags
+          .filter((f) => ids.has(f.id))
+          .map((f) => ({ id: f.id, position: { ...f.position } })),
+      };
+      setDragging({ startX: sx, startY: sy });
     },
-    [mode, schematic.components, svgPoint, onSelect]
+    [mode, schematic.components, schematic.wires, schematic.flags, svgPoint, onSelect, selectedIds]
   );
 
   // Reset viewBox when sheet size changes (snap immediately, no animation)
@@ -508,7 +539,7 @@ export function Editor({
     return () => svg.removeEventListener("wheel", handleWheel);
   }, [schematic.sheet.width, animateToTarget]);
 
-  // Keyboard: Escape cancels wire, Delete removes selected wire
+  // Keyboard: Escape cancels wire, Delete removes selected wire, R rotates selection
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -518,12 +549,20 @@ export function Editor({
         setCursorPos(null);
         setMarquee(null);
         onSelect(new Set());
+        return;
+      }
+      if ((e.key === "r" || e.key === "R") && selectedIds.size > 0) {
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName?.toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select") return;
+        e.preventDefault();
+        onRotateSelection(selectedIds, 90);
       }
       // Delete/Backspace handled by parent via PropertyPanel
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [onSelect, selectedIds, schematic.wires]);
+  }, [onSelect, selectedIds, schematic.wires, onRotateSelection]);
 
   // Reset wire state when switching away from wire mode
   useEffect(() => {
@@ -558,10 +597,11 @@ export function Editor({
     }
 
     if (wirePhase === "second" && wireCorner) {
-      // Straight line from corner to cursor
+      // Axis-snapped preview from corner — mirrors first-segment behavior
+      const end = computeCorner(wireCorner, cursorPos);
       return (
         <line
-          x1={wireCorner.x} y1={wireCorner.y} x2={cursorPos.x} y2={cursorPos.y}
+          x1={wireCorner.x} y1={wireCorner.y} x2={end.x} y2={end.y}
           stroke="var(--color-selection)" strokeWidth={2} strokeDasharray="4,4" pointerEvents="none"
         />
       );
@@ -727,18 +767,27 @@ export function Editor({
                 stroke="transparent"
                 strokeWidth={12}
                 onMouseDown={(e) => {
-                  if (mode === "select" && e.button === 0 && isWireSelected) {
+                  if (mode === "select" && e.button === 0 && isWireSelected && !e.shiftKey) {
                     e.stopPropagation();
                     const pos = svgPoint(e.clientX, e.clientY);
                     const sx = snapToGrid(pos.x), sy = snapToGrid(pos.y);
-                    const selected = schematic.wires.filter((w) => selectedIds.has(w.id));
-                    wireDragOrigsRef.current = new Map(selected.map((w) => [w.id, { from: { ...w.from }, to: { ...w.to } }]));
-                    setWireDrag({ startX: sx, startY: sy });
+                    dragSnapshotRef.current = {
+                      components: schematic.components
+                        .filter((c) => selectedIds.has(c.id))
+                        .map((c) => ({ id: c.id, position: { ...c.position } })),
+                      wires: schematic.wires
+                        .filter((w) => selectedIds.has(w.id))
+                        .map((w) => ({ id: w.id, from: { ...w.from }, to: { ...w.to } })),
+                      flags: schematic.flags
+                        .filter((f) => selectedIds.has(f.id))
+                        .map((f) => ({ id: f.id, position: { ...f.position } })),
+                    };
+                    setDragging({ startX: sx, startY: sy });
                   }
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
-                  if (wireDrag) return;
+                  if (dragging) return;
                   if (e.shiftKey) {
                     const next = new Set(selectedIds);
                     if (next.has(wire.id)) next.delete(wire.id);
