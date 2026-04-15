@@ -11,7 +11,6 @@ from services.vision import identify_components, read_directives, describe_layou
 from services.schematic_builder import build_asc, build_graph_from_analysis, _normalize_analysis
 from services.llm_client import OpenRouterError
 from services.layout import compute_layout
-from services.wire_router import compute_wires
 from services.schemas import normalize_pin
 
 router = APIRouter(prefix="/api/wizard")
@@ -181,18 +180,31 @@ async def wizard_wires(
             if comp_entry:
                 lbl["pin"] = normalize_pin(comp_entry["type"], lbl["pin"])
 
-        comp_map = {}
-        for comp in components:
-            name = comp["instanceName"]
-            if name in positions:
-                comp_map[name] = {
-                    "x": positions[name]["x"],
-                    "y": positions[name]["y"],
-                    "type": comp["type"],
-                    "rotation": positions[name].get("rotation", "R0"),
-                }
+        # Build a CircuitGraph and route via the VLM-aware path router.
+        # Pattern mirrors /api/redraw in this file (see around line 302).
+        from services.circuit_graph import CircuitGraph
+        from services.wire_router import route_with_paths
 
-        wire_result = compute_wires(comp_map, pin_defs, wire_desc, component_bounds, symbol_sizes)
+        graph = CircuitGraph(dictionary)
+        graph.add_components([
+            {"name": c["instanceName"], "type": c["type"], "value": c.get("value", "1")}
+            for c in components
+        ])
+        for c in components:
+            name = c["instanceName"]
+            if name in graph.components and name in positions:
+                node = graph.components[name]
+                node.position = (positions[name]["x"], positions[name]["y"])
+                node.resolved_rotation = positions[name].get("rotation", "R0")
+
+        wire_result = route_with_paths(
+            graph,
+            wire_paths=wire_desc.get("wire_paths", []),
+            buses=wire_desc.get("buses", []),
+            connections=wire_desc.get("connections", []),
+            grounds=wire_desc.get("grounds", []),
+            labels=wire_desc.get("labels", []),
+        )
     except Exception as exc:
         logger.error("Wire routing failed: %s", exc, exc_info=True)
         raise HTTPException(400, detail={"error": "Wire routing failed", "details": str(exc)})
