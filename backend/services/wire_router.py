@@ -249,7 +249,7 @@ def _route_net_with_direct_wires(
     # If all pins are in one column, we're done (direct wires handle it)
     unique_x = set(p[0] for p in column_endpoints)
     if len(unique_x) <= 1:
-        return _deduplicate_wires(wires)
+        return _merge_collinear_wires(wires)
 
     # Reduce endpoints to one per column — pick the one closest to the bus
     # (the direct wire already connects the rest of the column)
@@ -284,21 +284,64 @@ def _route_net_with_direct_wires(
         if py != bus_y:
             wires.append((px, py, px, bus_y))
 
-    return _deduplicate_wires(wires)
+    return _merge_collinear_wires(wires)
 
 
-def _deduplicate_wires(
+def _merge_collinear_wires(
     wires: list[tuple[int, int, int, int]],
 ) -> list[tuple[int, int, int, int]]:
-    """Remove duplicate wires (order-independent)."""
-    seen: set[tuple[int, int, int, int]] = set()
+    """Merge collinear wires that overlap or abut.
+
+    Groups wires by orientation and shared axis, then sweeps each group
+    collapsing overlapping and endpoint-touching intervals into their
+    union.  The result is a list of maximal non-overlapping segments —
+    electrically identical to the input but visually minimal.
+
+    Zero-length wires are dropped.  Non-Manhattan (diagonal) wires are
+    passed through unchanged; the router never emits them today.
+    """
+    horizontal: dict[int, list[tuple[int, int]]] = {}
+    vertical: dict[int, list[tuple[int, int]]] = {}
+    other: list[tuple[int, int, int, int]] = []
+
+    for x1, y1, x2, y2 in wires:
+        if x1 == x2 and y1 == y2:
+            continue  # zero-length
+        if y1 == y2:
+            lo, hi = (x1, x2) if x1 <= x2 else (x2, x1)
+            horizontal.setdefault(y1, []).append((lo, hi))
+        elif x1 == x2:
+            lo, hi = (y1, y2) if y1 <= y2 else (y2, y1)
+            vertical.setdefault(x1, []).append((lo, hi))
+        else:
+            other.append((x1, y1, x2, y2))
+
     result: list[tuple[int, int, int, int]] = []
-    for w in wires:
-        normalized = (min(w[0], w[2]), min(w[1], w[3]), max(w[0], w[2]), max(w[1], w[3]))
-        if normalized not in seen:
-            seen.add(normalized)
-            result.append(w)
+
+    for y, intervals in horizontal.items():
+        for lo, hi in _merge_intervals(intervals):
+            result.append((lo, y, hi, y))
+
+    for x, intervals in vertical.items():
+        for lo, hi in _merge_intervals(intervals):
+            result.append((x, lo, x, hi))
+
+    result.extend(other)
     return result
+
+
+def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
+    """Sweep-merge a list of (lo, hi) intervals; touching intervals merge."""
+    if not intervals:
+        return []
+    sorted_iv = sorted(intervals)
+    merged: list[list[int]] = [list(sorted_iv[0])]
+    for lo, hi in sorted_iv[1:]:
+        if lo <= merged[-1][1]:  # overlap or abut
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return [(a, b) for a, b in merged]
 
 
 # ── Image-aware router (uses VLM wire path descriptions) ────────────────────
@@ -460,7 +503,7 @@ def route_with_paths(
         if pos and label_name:
             result.flags.append({"name": label_name, "x": pos[0], "y": pos[1]})
 
-    result.wires = _deduplicate_wires(result.wires)
+    result.wires = _merge_collinear_wires(result.wires)
     return result
 
 
@@ -521,7 +564,7 @@ def route_connections(
         if pos and label_name:
             result.flags.append({"name": label_name, "x": pos[0], "y": pos[1]})
 
-    result.wires = _deduplicate_wires(result.wires)
+    result.wires = _merge_collinear_wires(result.wires)
     return result
 
 
@@ -583,7 +626,7 @@ def route_nets(graph: "CircuitGraph") -> WireResult:
                 result.flags.append({"name": net_name, "x": px, "y": py})
 
     # Deduplicate wires
-    result.wires = _deduplicate_wires(result.wires)
+    result.wires = _merge_collinear_wires(result.wires)
 
     return result
 
