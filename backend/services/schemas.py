@@ -114,10 +114,29 @@ class LabelRef(BaseModel):
     label: str
 
 
+class WirePath(BaseModel):
+    from_pin: str
+    to_pin: str
+    path: str = "L_horizontal_first"
+
+    model_config = {"populate_by_name": True}
+
+
+class Bus(BaseModel):
+    orientation: str = "horizontal"
+    y_pct: float | None = None
+    x_pct: float | None = None
+    connects: list[str] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
 class WiresResponse(BaseModel):
     connections: list[WireConnection] = Field(default_factory=list)
     grounds: list[GroundRef] = Field(default_factory=list)
     labels: list[LabelRef] = Field(default_factory=list)
+    wire_paths: list[WirePath] = Field(default_factory=list)
+    buses: list[Bus] = Field(default_factory=list)
 
 
 # ── Pin normalization ─────────────────────────────────────────────────────────
