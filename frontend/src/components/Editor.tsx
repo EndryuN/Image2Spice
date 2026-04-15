@@ -6,6 +6,7 @@ import type {
   Position,
 } from "../types/schematic";
 import { snapToGrid } from "../lib/gridSnap";
+import { isCollinearOverlap } from "../lib/wireOverlap";
 
 interface EditorProps {
   schematic: Schematic;
@@ -266,6 +267,17 @@ export function Editor({
         } else if (wirePhase === "first" && wireStart) {
           // Lock the corner, transition to second segment
           const corner = computeCorner(wireStart, pos);
+          // Reject if the first segment would lie on top of an existing wire
+          if (
+            (corner.x !== wireStart.x || corner.y !== wireStart.y) &&
+            isCollinearOverlap({ from: wireStart, to: corner }, schematic.wires)
+          ) {
+            setWireStart(null);
+            setWireCorner(null);
+            setWirePhase(null);
+            setCursorPos(null);
+            return;
+          }
           // Place first segment if it has length
           if (corner.x !== wireStart.x || corner.y !== wireStart.y) {
             onAddWire(wireStart, corner);
@@ -291,6 +303,19 @@ export function Editor({
           }
           // Place second segment and finish — axis-snap from corner, matches first-segment behavior
           const endPos = computeCorner(wireCorner, snapPosition(raw));
+          // Reject if the second segment would lie on top of an existing wire.
+          // Segment 1 was already committed; we do NOT roll it back — this matches
+          // the existing abort pattern at the onWire hit-test above.
+          if (
+            (endPos.x !== wireCorner.x || endPos.y !== wireCorner.y) &&
+            isCollinearOverlap({ from: wireCorner, to: endPos }, schematic.wires)
+          ) {
+            setWireStart(null);
+            setWireCorner(null);
+            setWirePhase(null);
+            setCursorPos(null);
+            return;
+          }
           if (endPos.x !== wireCorner.x || endPos.y !== wireCorner.y) {
             onAddWire(wireCorner, endPos);
           }
@@ -311,7 +336,7 @@ export function Editor({
         marqueeRef.current = m;
       }
     },
-    [mode, wirePhase, wireStart, wireCorner, svgPoint, snapPosition, computeCorner, onAddWire, onSelect, onToggleMode, viewBox]
+    [mode, wirePhase, wireStart, wireCorner, svgPoint, snapPosition, computeCorner, onAddWire, onSelect, onToggleMode, viewBox, schematic.wires]
   );
 
   const handleMouseMove = useCallback(
