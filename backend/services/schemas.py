@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -117,18 +117,19 @@ class LabelRef(BaseModel):
 class WirePath(BaseModel):
     from_pin: str
     to_pin: str
-    path: str = "L_horizontal_first"
-
-    model_config = {"populate_by_name": True}
+    path: Literal[
+        "L_horizontal_first",
+        "L_vertical_first",
+        "direct_horizontal",
+        "direct_vertical",
+    ] = "L_horizontal_first"
 
 
 class Bus(BaseModel):
-    orientation: str = "horizontal"
+    orientation: Literal["horizontal", "vertical"] = "horizontal"
     y_pct: float | None = None
     x_pct: float | None = None
     connects: list[str] = Field(default_factory=list)
-
-    model_config = {"populate_by_name": True}
 
 
 class WiresResponse(BaseModel):

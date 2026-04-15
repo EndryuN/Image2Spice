@@ -41,7 +41,7 @@ def test_wires_response_parses_buses():
     assert resp.buses[0].connects == ["R1.B", "R2.B", "C1.A"]
 
 
-def test_wires_response_roundtrip_dump_keeps_alias_keys():
+def test_wires_response_dumps_wire_paths():
     resp = WiresResponse.model_validate({
         "connections": [],
         "grounds": [],
@@ -51,3 +51,29 @@ def test_wires_response_roundtrip_dump_keeps_alias_keys():
     dumped = resp.model_dump(by_alias=True)
     assert "wire_paths" in dumped
     assert dumped["wire_paths"][0]["from_pin"] == "R1.A"
+
+
+def test_wires_response_rejects_invalid_path():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        WiresResponse.model_validate({
+            "connections": [],
+            "grounds": [],
+            "labels": [],
+            "wire_paths": [{"from_pin": "R1.A", "to_pin": "R2.A", "path": "zigzag"}],
+        })
+
+
+def test_wires_response_rejects_invalid_orientation():
+    import pytest
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        WiresResponse.model_validate({
+            "connections": [],
+            "grounds": [],
+            "labels": [],
+            "buses": [{"orientation": "diagonal", "y_pct": 40, "connects": ["R1.A", "R2.A"]}],
+        })
