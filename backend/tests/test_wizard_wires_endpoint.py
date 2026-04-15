@@ -90,9 +90,15 @@ def test_wires_endpoint_honors_wire_path_hint(
 ):
     resp = _post(mock_wires_desc_with_paths, components_payload, positions_payload)
     assert resp.status_code == 200, resp.text
-    body = resp.json()
-    wires = body["wires"]
-    # L_vertical_first: first segment is vertical (x1 == x2), second is horizontal (y1 == y2)
-    vertical_first = [w for w in wires if w["x1"] == w["x2"]]
-    assert len(vertical_first) >= 1, \
-        f"Expected a vertical-first segment; got {wires}"
+    wires = resp.json()["wires"]
+
+    # L_vertical_first: the horizontal leg sits at the BOTTOM component's y (R2, y=128),
+    # not the TOP component's y (R1, y=64).  Horizontal-first would place it at R1's y.
+    horiz_segments = [w for w in wires if w["y1"] == w["y2"]]
+    assert horiz_segments, f"Expected a horizontal segment; got {wires}"
+    horiz_y = horiz_segments[0]["y1"]
+    # R1 at y=64, R2 at y=128 -> midpoint = 96.  L_vertical_first corner is closer to R2.
+    assert horiz_y > 96, (
+        f"Expected horizontal leg near R2's y (128), got {horiz_y} - "
+        f"looks like L_horizontal_first (corner at R1's y), hint was not honored"
+    )

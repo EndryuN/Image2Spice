@@ -133,15 +133,10 @@ async def wizard_wires(
     provider, api_key, model = _parse_provider(provider_json)
 
     dictionary = _load_dictionary()
-    pin_defs = {}
-    component_bounds = {}
-    symbol_sizes = {}
-    for comp_id, comp_data in dictionary["components"].items():
-        pin_defs[comp_id] = comp_data.get("pins", [])
-        bounds = comp_data.get("geometry", {}).get("bounds")
-        if bounds:
-            component_bounds[comp_id] = bounds
-        symbol_sizes[comp_id] = (comp_data["symbol"]["width"], comp_data["symbol"]["height"])
+    pin_defs = {
+        comp_id: comp_data.get("pins", [])
+        for comp_id, comp_data in dictionary["components"].items()
+    }
 
     try:
         wire_desc = await describe_wires(image_bytes, components, pin_defs, provider=provider, api_key=api_key, model=model)
