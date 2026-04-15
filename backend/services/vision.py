@@ -142,23 +142,30 @@ async def describe_wires(
         "- MOSFET: D (drain), G (gate), S (source)\n\n"
         "Also list:\n"
         "- Ground connections (triangles or '0' symbol)\n"
-        "- Net labels (VCC, OUT, etc.)\n\n"
-        "Include ALL connections. Don't skip any wires.\n\n"
+        "- Net labels (VCC, OUT, etc.)\n"
+        "- wire_paths (optional): per-wire path shape "
+        '("L_horizontal_first", "L_vertical_first", "direct_horizontal", "direct_vertical").\n'
+        "- buses (optional): shared bus lines touching 3+ pins; give orientation, y_pct or x_pct, and connects list.\n\n"
+        "If a path or bus is not visually obvious, leave the field as []. Include ALL connections. Don't skip any wires.\n\n"
         'Output JSON:\n'
         '{"connections": [{"from": {"component": "R1", "pin": "B"}, "to": {"component": "Q1", "pin": "C"}}], '
         '"grounds": [{"component": "R5", "pin": "B"}], '
-        '"labels": [{"component": "R3", "pin": "A", "label": "VCC"}]}'
+        '"labels": [{"component": "R3", "pin": "A", "label": "VCC"}], '
+        '"wire_paths": [{"from_pin": "R1.A", "to_pin": "Q1.C", "path": "L_horizontal_first"}], '
+        '"buses": [{"orientation": "horizontal", "y_pct": 40, "connects": ["R1.B", "R2.B"]}]}'
     )
     vision_model = model or VISION_MODELS.get(provider, VISION_MODELS["local"])
     response = await chat_with_vision(vision_model, system, user, image_bytes, provider=provider, api_key=api_key)
     logger.info("Wire VLM raw response: %s", response[:1000])
     raw = _extract_json(response)
-    logger.info("Wire parsed: %d connections, %d grounds, %d labels",
+    logger.info("Wire parsed: %d connections, %d grounds, %d labels, %d wire_paths, %d buses",
                 len(raw.get("connections", [])) if isinstance(raw, dict) else 0,
                 len(raw.get("grounds", [])) if isinstance(raw, dict) else 0,
-                len(raw.get("labels", [])) if isinstance(raw, dict) else 0)
+                len(raw.get("labels", [])) if isinstance(raw, dict) else 0,
+                len(raw.get("wire_paths", [])) if isinstance(raw, dict) else 0,
+                len(raw.get("buses", [])) if isinstance(raw, dict) else 0)
     if not isinstance(raw, dict):
-        raw = {"connections": [], "grounds": [], "labels": []}
+        raw = {"connections": [], "grounds": [], "labels": [], "wire_paths": [], "buses": []}
     parsed = WiresResponse.model_validate(raw)
     return parsed.model_dump(by_alias=True)
 

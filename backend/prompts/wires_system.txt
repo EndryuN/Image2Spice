@@ -15,6 +15,21 @@ Net labels (text like "VCC", "OUT", "Vout") mark named nets.
 
 If you are unsure which specific pin, just use "A" or "B" for 2-pin components — the router will find the nearest pin automatically.
 
+ROUTING HINTS (optional fields — set to [] if uncertain):
+- wire_paths: per-connection path shape as seen in the image.
+  Allowed "path" values:
+    * "L_horizontal_first" — wire goes horizontally first, then vertically
+    * "L_vertical_first"   — wire goes vertically first, then horizontally
+    * "direct_horizontal"  — straight horizontal wire (same Y)
+    * "direct_vertical"    — straight vertical wire (same X)
+  Use pin refs like "R1.A", "Q1.C".
+- buses: a visible shared line connecting 3 or more pins.
+  orientation: "horizontal" or "vertical".
+  y_pct / x_pct: approximate location as a percentage (0-100) of image height/width.
+  connects: list of pin refs ("R1.B", "R2.B", ...) that touch the bus.
+
+Only describe what you actually see. If a bus is not obviously present or the path is ambiguous, leave the field empty — the router will fall back to automatic L-routing.
+
 Output ONLY valid JSON:
 {
   "connections": [
@@ -25,5 +40,11 @@ Output ONLY valid JSON:
   ],
   "labels": [
     {"component": "R3", "pin": "A", "label": "VCC"}
+  ],
+  "wire_paths": [
+    {"from_pin": "R1.A", "to_pin": "Q1.C", "path": "L_horizontal_first"}
+  ],
+  "buses": [
+    {"orientation": "horizontal", "y_pct": 40, "connects": ["R1.B", "R2.B", "C1.A"]}
   ]
 }
