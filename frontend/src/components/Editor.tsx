@@ -603,18 +603,28 @@ export function Editor({
   const wirePreviewLines = useMemo(() => {
     if (!wireStart || !cursorPos) return null;
 
+    const colorFor = (from: Position, to: Position) =>
+      isCollinearOverlap({ from, to }, schematic.wires)
+        ? "var(--color-error)"
+        : "var(--color-selection)";
+    const widthFor = (from: Position, to: Position) =>
+      isCollinearOverlap({ from, to }, schematic.wires) ? 3 : 2;
+
     if (wirePhase === "first") {
-      // L-shaped preview from start to cursor
       const corner = computeCorner(wireStart, cursorPos);
       return (
         <>
           <line
             x1={wireStart.x} y1={wireStart.y} x2={corner.x} y2={corner.y}
-            stroke="var(--color-selection)" strokeWidth={2} strokeDasharray="4,4" pointerEvents="none"
+            stroke={colorFor(wireStart, corner)}
+            strokeWidth={widthFor(wireStart, corner)}
+            strokeDasharray="4,4" pointerEvents="none"
           />
           <line
             x1={corner.x} y1={corner.y} x2={cursorPos.x} y2={cursorPos.y}
-            stroke="var(--color-selection)" strokeWidth={2} strokeDasharray="4,4" pointerEvents="none"
+            stroke={colorFor(corner, cursorPos)}
+            strokeWidth={widthFor(corner, cursorPos)}
+            strokeDasharray="4,4" pointerEvents="none"
           />
           <circle cx={corner.x} cy={corner.y} r={3} fill="var(--color-selection)" pointerEvents="none" />
         </>
@@ -622,18 +632,19 @@ export function Editor({
     }
 
     if (wirePhase === "second" && wireCorner) {
-      // Axis-snapped preview from corner — mirrors first-segment behavior
       const end = computeCorner(wireCorner, cursorPos);
       return (
         <line
           x1={wireCorner.x} y1={wireCorner.y} x2={end.x} y2={end.y}
-          stroke="var(--color-selection)" strokeWidth={2} strokeDasharray="4,4" pointerEvents="none"
+          stroke={colorFor(wireCorner, end)}
+          strokeWidth={widthFor(wireCorner, end)}
+          strokeDasharray="4,4" pointerEvents="none"
         />
       );
     }
 
     return null;
-  }, [wireStart, wireCorner, wirePhase, cursorPos, computeCorner]);
+  }, [wireStart, wireCorner, wirePhase, cursorPos, computeCorner, schematic.wires]);
 
   // ── Nearest pin highlight ──────────────────────────────────────────
   const nearestPin = useMemo(() => {
